@@ -767,18 +767,22 @@ def check_ip():
 
 
 def clean_for_filename(string):
-    """Normalize a title for filesystem use without replacing spaces with hyphens."""
+    """Normalize a title for filesystem use while preserving spaces and real hyphens."""
     if string is None:
         return ""
-    string = str(string)
-    # Discard bracketed disc-label annotations and normalize common separators.
-    string = re.sub(r"\[(.*?)]", "", string)
-    string = string.replace("_", " ")
-    string = string.replace("&", "and")
+    string = str(string).replace("_", " ").replace("&", "and")
     string = string.replace(":", " - ")
-    string = re.sub(r'[<>"/\\|?*]', " ", string)
-    string = re.sub(r"\s+", " ", string)
-    return string.strip(" .")
+    for char in '<>:"/|?*':
+        string = string.replace(char, " ")
+    string = string.replace(chr(92), " ")
+    # Discard bracketed disc-label annotations without changing ordinary punctuation.
+    while "[" in string and "]" in string:
+        start = string.find("[")
+        end = string.find("]", start)
+        if end < 0:
+            break
+        string = string[:start] + string[end + 1:]
+    return " ".join(string.strip(" .").split())
 
 
 def duplicate_run_check(dev_path):
