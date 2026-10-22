@@ -146,10 +146,9 @@ def identify_bluray(job):
             db.session.commit()
             return False
         else:
-            bluray_title = str(job.label)
-            bluray_title = bluray_title.replace('_', ' ')
-            bluray_title = bluray_title.title()
-            job.title = job.title_auto = bluray_title
+            bluray_title = str(job.label).replace('_', ' ')
+            # Preserve the disc label's original casing (e.g. iRobot, eXistenZ).
+            job.title = job.title_auto = utils.clean_for_filename(bluray_title)
             job.year = ""
             db.session.commit()
             return True
@@ -352,6 +351,11 @@ def metadata_selector(job, title=None, year=None):
     if title is None or str(title).strip().lower() in ("", "not identified"):
         logging.info(f"Not searching for placeholder title: {title!r}")
         return None
+
+    # Disc labels frequently use underscores or plus signs to stand in for spaces.
+    # Normalize those separators for search, while leaving real title hyphens intact.
+    title = re.sub(r"[_+]+", " ", str(title))
+    title = re.sub(r"\\s+", " ", title).strip()
     search_results = None
     if cfg.arm_config['METADATA_PROVIDER'].lower() == "tmdb":
         logging.debug("provider tmdb")
@@ -371,38 +375,35 @@ def metadata_selector(job, title=None, year=None):
 
 def identify_loop(job, response, title, year):
     """
+    Try metadata lookup without destructively chopping up the detected title.
 
-    :param job:
-    :param response:
-    :param title:
-    :param year:
+    Older logic removed everything after any hyphen and then dropped words one
+    at a time until some result matched. This broke legitimate hyphenated names
+    and could silently assign an unrelated movie. Only known disc/format suffixes
+    are now removed as a final fallback.
     """
-    # handle failures
-    # this is a little kludgy, but it kind of works...
     logging.debug(f"Response = {response}")
+    title = re.sub(r"[_\\s]+", "+", str(title or "").strip())
+    title = re.sub(r"\\++", "+", title)
+
     if response is None:
-        # try with year first
         response = try_with_year(job, response, title, year)
-        # try submitting without the year
         response = try_without_year(job, response, title)
 
-        if response is None:
-            while response is None and title.find("-") > 0:
-                title = title.rsplit('-', 1)[0]
-                logging.debug(f"Trying title: {title}")
-                response = metadata_selector(job, title, year)
-                logging.debug(f"response: {response}")
+    if response is not None:
+        return
 
-            # if still fail, then try slicing off the last word in a loop
-            while response is None and title.count('+') > 0:
-                title = title.rsplit('+', 1)[0]
-                logging.debug(f"Trying title: {title}")
-                response = metadata_selector(job, title, year)
-                logging.debug(f"response: {response}")
-                if response is None:
-                    # Still failing - try the words we have without year
-                    logging.debug("Removing year...")
-                    response = metadata_selector(job, title)
+    suffix_patterns = (
+        r"[+-]+(?:disc|disk)[+-]*\\d*(?:[+-].*)?$",
+        r"[+-]+(?:dvd|blu[\\s+-]*ray|bluray|bdrip|brrip|hdtv|ntsc|pal|720p|1080p|2160p|x264|x265)(?:[+-].*)?$",
+    )
+    candidate = title
+    for pattern in suffix_patterns:
+        candidate = re.sub(pattern, "", candidate, flags=re.IGNORECASE).rstrip("+- ")
+    if candidate and candidate != title:
+        logging.debug("Retrying metadata lookup after removing disc/format suffix: %s", candidate)
+        response = try_with_year(job, None, candidate, year)
+        response = try_without_year(job, response, candidate)
 
 
 def try_without_year(job, response, title):
