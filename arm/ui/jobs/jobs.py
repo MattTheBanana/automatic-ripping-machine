@@ -220,7 +220,20 @@ def updatetitle():
 
     job.year = job.year_manual = request.args.get('year')
     job.video_type = job.video_type_manual = request.args.get('type')
-    job.imdb_id = job.imdb_id_manual = request.args.get('imdbID')
+    imdb_id = request.args.get('imdbID')
+    tmdb_id = request.args.get('tmdbID')
+    if (not tmdb_id
+            and str(cfg.arm_config.get('FOLDER_ID_TYPE', 'none')).lower() == 'tmdb'
+            and imdb_id
+            and cfg.arm_config.get('TMDB_API_KEY')):
+        try:
+            tmdb_details = ui_utils.tmdb_find(imdb_id)
+            tmdb_id = tmdb_details.get('tmdbID') if tmdb_details else None
+        except Exception as error:
+            app.logger.warning("Could not resolve TMDB ID for %s: %s", imdb_id, error)
+
+    job.imdb_id = job.imdb_id_manual = imdb_id
+    job.tmdb_id = tmdb_id
     job.poster_url = job.poster_url_manual = request.args.get('poster')
 
     job.hasnicetitle = True
