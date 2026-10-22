@@ -169,20 +169,43 @@ def convert_job_type(video_type):
 
 def fix_job_title(job):
     """
-    Validate the job title remove/add job year as needed\n
-    :param job:
-    :return: corrected job.title
+    Return a Jellyfin-friendly media title including the year and optional provider ID.
+
+    FOLDER_ID_TYPE is stored in each job's config so a rip keeps the naming policy
+    it was created with. Supported values are none, tmdb, and imdb.
     """
-    if job.year and job.year != "0000" and job.year != "":
-        if job.title_manual:
-            job_title = f"{job.title_manual} ({job.year})"
-        else:
-            job_title = f"{job.title} ({job.year})"
+    raw_title = getattr(job, "title_manual", None) or getattr(job, "title", None)
+    if not raw_title or str(raw_title).strip().lower() in ("none", "not identified"):
+        raw_title = getattr(job, "label", None)
+    if not raw_title or str(raw_title).strip().lower() in ("none", "not identified"):
+        raw_title = "Unknown Title"
+    job_title = clean_for_filename(str(raw_title))
+
+    year = getattr(job, "year", None)
+    if year and str(year) not in ("0000", "None"):
+        job_title = f"{job_title} ({year})"
+
+    job_config = getattr(job, "config", None)
+    id_type = getattr(job_config, "FOLDER_ID_TYPE", None)
+    if not id_type:
+        id_type = cfg.arm_config.get("FOLDER_ID_TYPE", "none")
+    id_type = str(id_type).strip().lower()
+
+    if id_type == "tmdb":
+        media_id = getattr(job, "tmdb_id", None)
+        valid_id = media_id is not None and re.fullmatch(r"\d+", str(media_id).strip())
+        provider_tag = "tmdbid"
+    elif id_type == "imdb":
+        media_id = getattr(job, "imdb_id", None)
+        valid_id = media_id is not None and re.fullmatch(r"tt\d+", str(media_id).strip(), re.IGNORECASE)
+        provider_tag = "imdbid"
     else:
-        if job.title_manual:
-            job_title = f"{job.title_manual}"
-        else:
-            job_title = f"{job.title}"
+        media_id = None
+        valid_id = False
+        provider_tag = ""
+
+    if valid_id:
+        job_title = f"{job_title} [{provider_tag}-{str(media_id).strip()}]"
     return job_title
 
 
@@ -746,16 +769,22 @@ def check_ip():
 
 
 def clean_for_filename(string):
-    """ Cleans up string for use in filename """
-    string = re.sub('\\[(.*?)]', '', string)
-    string = re.sub('\\s+', '-', string)
-    string = string.replace(' : ', ' - ')
-    string = string.replace(':', '-')
-    string = string.replace('&', 'and')
-    string = string.replace("\\", " - ")
-    string = string.replace(" ", " - ")
-    string = string.strip()
-    return re.sub('[^\\w.() -]', '', string)
+    """Normalize a title for filesystem use while preserving spaces and real hyphens."""
+    if string is None:
+        return ""
+    string = str(string).replace("_", " ").replace("&", "and")
+    string = string.replace(":", " - ")
+    for char in '<>:"/|?*':
+        string = string.replace(char, " ")
+    string = string.replace(chr(92), " ")
+    # Discard bracketed disc-label annotations without changing ordinary punctuation.
+    while "[" in string and "]" in string:
+        start = string.find("[")
+        end = string.find("]", start)
+        if end < 0:
+            break
+        string = string[:start] + string[end + 1:]
+    return " ".join(string.strip(" .").split())
 
 
 def duplicate_run_check(dev_path):

@@ -26,6 +26,7 @@ class Config(db.Model):
     RAW_PATH = db.Column(db.String(255))
     TRANSCODE_PATH = db.Column(db.String(255))
     COMPLETED_PATH = db.Column(db.String(255))
+    FOLDER_ID_TYPE = db.Column(db.String(16))
     EXTRAS_SUB = db.Column(db.String(255))
     INSTALLPATH = db.Column(db.String(255))
     LOGPATH = db.Column(db.String(255))

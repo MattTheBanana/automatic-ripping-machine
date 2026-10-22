@@ -4,6 +4,11 @@ concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: true
 
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
 # Controls when the action will run. 
 on:
   # Triggers the workflow on push or pull request events but only for the v2.5.0_dev branch
@@ -48,7 +53,7 @@ jobs:
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
   test-armui:
     name: "Test A.R.M UI"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         python-version: ['3.9', '3.10', '3.11', '3.12']
@@ -85,5 +90,10 @@ jobs:
         sudo mkdir -p /opt/arm/arm /opt/arm/setup
         sudo cp -r arm/migrations /opt/arm/arm
         cp setup/arm.yaml /opt/arm/setup/arm.yaml
+    - name: Test media naming helpers
+      if: matrix.python-version == '3.10'
+      env:
+        PYTHONPATH: .
+      run: pytest -q test/unittest/test_ripper_title_naming.py
     - name: Run A.R.M ui
       run: timeout 1 python ./arm/runui.py || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi

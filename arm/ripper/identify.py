@@ -146,10 +146,9 @@ def identify_bluray(job):
             db.session.commit()
             return False
         else:
-            bluray_title = str(job.label)
-            bluray_title = bluray_title.replace('_', ' ')
-            bluray_title = bluray_title.title()
-            job.title = job.title_auto = bluray_title
+            bluray_title = str(job.label).replace('_', ' ')
+            # Preserve the disc label's original casing (e.g. iRobot, eXistenZ).
+            job.title = job.title_auto = utils.clean_for_filename(bluray_title)
             job.year = ""
             db.session.commit()
             return True
@@ -304,29 +303,46 @@ def get_video_details(job):
 
 def update_job(job, search_results):
     """
-    used to update a successfully found job
-    :param job: job obj
-    :param search_results: json returned from metadata provider
-    :return: None if error
+    Update a job using a successful metadata result and preserve available provider IDs.
     """
-    # logging.debug(f"s =======  {search_results}")
-    if 'Search' not in search_results:
+    if not search_results or "Search" not in search_results or not search_results["Search"]:
         return None
-    new_year = search_results['Search'][0]['Year']
-    title = utils.clean_for_filename(search_results['Search'][0]['Title'])
-    logging.debug(f"Webservice successful.  New title is {title}.  New Year is: {new_year}")
+
+    result = search_results["Search"][0]
+    new_year = result.get("Year", "")
+    title = utils.clean_for_filename(result.get("Title", ""))
+    imdb_id = result.get("imdbID")
+    tmdb_id = result.get("id") or result.get("tmdbID")
+
+    # OMDb results include IMDb IDs but not TMDB IDs. Resolve TMDB only when it
+    # is the configured output identifier; default setups incur no extra request.
+    if (not tmdb_id
+            and str(cfg.arm_config.get("FOLDER_ID_TYPE", "none")).lower() == "tmdb"
+            and imdb_id
+            and cfg.arm_config.get("TMDB_API_KEY")):
+        try:
+            tmdb_details = ui_utils.tmdb_find(imdb_id)
+            if tmdb_details:
+                tmdb_id = tmdb_details.get("tmdbID")
+                if not tmdb_id and tmdb_details.get("results"):
+                    tmdb_id = tmdb_details["results"][0].get("id")
+        except Exception as error:
+            logging.warning("Could not resolve TMDB ID for %s: %s", imdb_id, error)
+
+    logging.debug("Webservice successful. New title is %s. New year is: %s", title, new_year)
     args = {
-        'year_auto': str(new_year),
-        'year': str(new_year),
-        'title_auto': title,
-        'title': title,
-        'video_type_auto': search_results['Search'][0]['Type'],
-        'video_type': search_results['Search'][0]['Type'],
-        'imdb_id_auto': search_results['Search'][0]['imdbID'],
-        'imdb_id': search_results['Search'][0]['imdbID'],
-        'poster_url_auto': search_results['Search'][0]['Poster'],
-        'poster_url': search_results['Search'][0]['Poster'],
-        'hasnicetitle': True
+        "year_auto": str(new_year),
+        "year": str(new_year),
+        "title_auto": title,
+        "title": title,
+        "video_type_auto": result.get("Type"),
+        "video_type": result.get("Type"),
+        "imdb_id_auto": imdb_id,
+        "imdb_id": imdb_id,
+        "tmdb_id": str(tmdb_id) if tmdb_id else None,
+        "poster_url_auto": result.get("Poster"),
+        "poster_url": result.get("Poster"),
+        "hasnicetitle": True,
     }
     return utils.database_updater(args, job)
 
@@ -342,16 +358,14 @@ def metadata_selector(job, title=None, year=None):
 
     :return: json/dict object or None
     """
-    # A disc whose label could not be read is given the placeholder
-    # "not identified" in identify_dvd(). Searching for that string finds real
-    # films with unhelpful names -- TMDB matches a 2018 Brazilian film titled
-    # "Prefiro nao ser identificada" -- and update_job() then overwrites
-    # job.title with it. The guard in get_video_details() cannot catch this,
-    # because by the time it runs job.title is the bogus match rather than the
-    # placeholder. Refuse the search here instead, where every caller passes.
+    # Normalize label separators before checking the placeholder. Some unreadable
+    # discs report "not_identified" or "not+identified", which must not be searched.
+    if title is not None:
+        title = " ".join(str(title).replace("_", " ").replace("+", " ").split())
     if title is None or str(title).strip().lower() in ("", "not identified"):
         logging.info(f"Not searching for placeholder title: {title!r}")
         return None
+
     search_results = None
     if cfg.arm_config['METADATA_PROVIDER'].lower() == "tmdb":
         logging.debug("provider tmdb")
@@ -371,38 +385,43 @@ def metadata_selector(job, title=None, year=None):
 
 def identify_loop(job, response, title, year):
     """
+    Try metadata lookup without destructively chopping up the detected title.
 
-    :param job:
-    :param response:
-    :param title:
-    :param year:
+    The previous fallback removed everything after any hyphen and then shortened
+    titles word-by-word, which could break hyphenated names and silently select an
+    unrelated movie. Only known disc/format suffixes are removed as a last resort.
     """
-    # handle failures
-    # this is a little kludgy, but it kind of works...
-    logging.debug(f"Response = {response}")
+    logging.debug("Response = %s", response)
+    title = str(title or "").replace("_", "+").replace(" ", "+")
+    while "++" in title:
+        title = title.replace("++", "+")
+
     if response is None:
-        # try with year first
         response = try_with_year(job, response, title, year)
-        # try submitting without the year
         response = try_without_year(job, response, title)
 
-        if response is None:
-            while response is None and title.find("-") > 0:
-                title = title.rsplit('-', 1)[0]
-                logging.debug(f"Trying title: {title}")
-                response = metadata_selector(job, title, year)
-                logging.debug(f"response: {response}")
+    if response is not None:
+        return
 
-            # if still fail, then try slicing off the last word in a loop
-            while response is None and title.count('+') > 0:
-                title = title.rsplit('+', 1)[0]
-                logging.debug(f"Trying title: {title}")
-                response = metadata_selector(job, title, year)
-                logging.debug(f"response: {response}")
-                if response is None:
-                    # Still failing - try the words we have without year
-                    logging.debug("Removing year...")
-                    response = metadata_selector(job, title)
+    # Normalize separator patterns like "Movie+-+DVD", but do not rewrite
+    # a genuine title hyphen, e.g. "Spider-Man".
+    candidate = title.replace("+-+", "+").replace("-+-", "+")
+    suffixes = (
+        "+disc+1", "+disc+2", "+disc+3", "+disk+1", "+disk+2", "+disk+3",
+        "+dvd", "+blu-ray", "+bluray", "+bdrip", "+brrip", "+hdtv", "+ntsc",
+        "+pal", "+720p", "+1080p", "+2160p", "+x264", "+x265",
+        "-dvd", "-blu-ray", "-bluray", "-bdrip", "-brrip", "-hdtv",
+    )
+    lowered = candidate.lower()
+    for suffix in suffixes:
+        if lowered.endswith(suffix):
+            candidate = candidate[:-len(suffix)].rstrip("+- ")
+            break
+
+    if candidate and candidate != title:
+        logging.debug("Retrying metadata lookup after removing disc/format suffix: %s", candidate)
+        response = try_with_year(job, None, candidate, year)
+        response = try_without_year(job, response, candidate)
 
 
 def try_without_year(job, response, title):

@@ -19,7 +19,8 @@ permissions:
 jobs:
   job-sync-docs-to-wiki:
     runs-on: ubuntu-latest
-    if: github.event_name != 'gollum'
+    # Wiki sync requires the upstream-only ARM_WIKI_TOKEN; forks publish their docs in the repository instead.
+    if: github.repository == 'automatic-ripping-machine/automatic-ripping-machine' && github.event_name != 'gollum'
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v7

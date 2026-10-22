@@ -132,6 +132,7 @@ class Job(db.Model):
     video_type_auto = db.Column(db.String(20))
     video_type_manual = db.Column(db.String(20))
     imdb_id = db.Column(db.String(15))
+    tmdb_id = db.Column(db.String(20))
     imdb_id_auto = db.Column(db.String(15))
     imdb_id_manual = db.Column(db.String(15))
     poster_url = db.Column(db.String(256))

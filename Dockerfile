@@ -2,7 +2,7 @@
 # setup default directories and configs
 FROM ghcr.io/mattthebanana/arm-dependencies-custom:2.0.0 AS base
 
-LABEL org.opencontainers.image.source=https://github.com/automatic-ripping-machine/automatic-ripping-machine
+LABEL org.opencontainers.image.source=https://github.com/MattTheBanana/automatic-ripping-machine
 LABEL org.opencontainers.image.license=MIT
 LABEL org.opencontainers.image.description='Automatic Ripping Machine for fully automated Blu-ray, DVD and audio disc ripping.'
 

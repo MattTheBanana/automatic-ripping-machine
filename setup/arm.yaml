@@ -100,6 +100,11 @@ DATA_RIP_PARAMETERS: ""
 # You will still need to provide an api key for the provider you have selected
 METADATA_PROVIDER: "omdb"
 
+# Add a metadata provider identifier to output folders/files for Jellyfin matching.
+# Options: "none" (default), "tmdb" ([tmdbid-123]), or "imdb" ([imdbid-tt1234567]).
+# The corresponding metadata ID must be available; TMDB IDs require the TMDB API key when OMDb is selected.
+FOLDER_ID_TYPE: "none"
+
 # Set to one of "none", "musicbrainz", "freecddb"
 # if "musicbrainz" is used the disc information are asked from musicbrainz.org
 # if "none" is used no label is identified

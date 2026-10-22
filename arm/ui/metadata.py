@@ -265,6 +265,8 @@ def tmdb_find(imdb_id):
         return_results['Poster'] = return_results['poster_url']
         return_results['Year'] = re.sub(TMDB_YEAR_REGEX, "", return_results['results'][0]['first_air_date'])
         return_results['Title'] = return_results['results'][0]['name']
+    if return_results.get('results'):
+        return_results['tmdbID'] = str(return_results['results'][0].get('id') or '')
     return return_results
 
 

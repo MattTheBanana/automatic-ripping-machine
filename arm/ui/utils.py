@@ -323,16 +323,22 @@ def get_info(directory):
 
 
 def clean_for_filename(string):
-    """ Cleans up string for use in filename """
-    string = re.sub(r'\s+', ' ', string)
-    string = string.replace(' : ', ' - ')
-    string = string.replace(':', '-')
-    string = string.replace('&', 'and')
-    string = string.replace("\\", " - ")
-    # Strip out any remaining illegal chars
-    string = re.sub(r"[^\w -]", "", string)
-    string = string.strip()
-    return string
+    """Normalize a media title for filesystem use, consistently across UI and ripper paths."""
+    if string is None:
+        return ""
+    string = str(string).replace("_", " ").replace("&", "and")
+    string = string.replace(":", " - ")
+    for char in '<>:"/|?*':
+        string = string.replace(char, " ")
+    string = string.replace(chr(92), " ")
+    # Discard bracketed disc-label annotations without changing ordinary punctuation.
+    while "[" in string and "]" in string:
+        start = string.find("[")
+        end = string.find("]", start)
+        if end < 0:
+            break
+        string = string[:start] + string[end + 1:]
+    return " ".join(string.strip(" .").split())
 
 
 def getsize(path):

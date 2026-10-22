@@ -1,18 +1,35 @@
 {% block ripper %}
     <div class="tab-pane pt-5" id="settings" role="tabpanel" aria-labelledby="settings-tab">
-        <h4> Ripper ARM Settings </h4>
+        <h4>Ripper Settings</h4>
+        <p class="text-muted">Filter by setting name or description to find an option quickly.</p>
+        <div class="form-group arm-settings-search">
+            <label class="sr-only" for="armSettingsSearch">Find a setting</label>
+            <input id="armSettingsSearch" type="search" class="form-control"
+                   placeholder="Search settings (e.g. TMDB, output path, HandBrake)…"
+                   autocomplete="off">
+        </div>
         <form id="ripperSettings" name="ripperSettings" method="post" action="">
             {{ form.hidden_tag() }}
+            <div id="armSettingsGrid" class="arm-settings-grid">
             {% for k, v in settings.items() %}
-                <div class="input-group mb-3">
+                <div class="input-group mb-3 arm-setting-row" data-setting-row="{{ k|lower }}" data-setting-text="{{ (k ~ ' ' ~ jsoncomments[k])|lower }}">
                     <div class="input-group-prepend">
                         <span class="input-group-text" id="{{ k }}">{{ k }}: </span>
                     </div>
+{% if k == 'FOLDER_ID_TYPE' %}
+                    <select class="form-control" aria-label="{{ k }}" name="{{ k }}" aria-describedby="{{ k }}"
+                            {% if ripper_read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
+                        <option value="none" {% if v|string|lower == 'none' %}selected{% endif %}>None (standard naming)</option>
+                        <option value="tmdb" {% if v|string|lower == 'tmdb' %}selected{% endif %}>TMDB ID — [tmdbid-123]</option>
+                        <option value="imdb" {% if v|string|lower == 'imdb' %}selected{% endif %}>IMDb ID — [imdbid-tt1234567]</option>
+                    </select>
+                    {% else %}
                     <input type="text" class="form-control" aria-label="{{ k }}" name="{{ k }}"
                            placeholder="{{ v }}" value="{{ v }}" aria-describedby="{{ k }}"
                            {% if ripper_read_only %}
                              disabled="" title="arm.yaml is read-only"
                            {% endif %}>
+                    {% endif %}
                     <a class="popovers" onClick='return false;' href=""
                        data-content="{{ jsoncomments[k]| replace("#", "\n") }}" rel="popover"
                        data-placement="top" data-original-title="{{ k }}">
@@ -21,9 +38,24 @@
                     </a>
                 </div>
             {% endfor %}
+            </div>
             <button id="settings" class="btn btn-secondary btn-lg btn-block" form="ripperSettings"
                     type="submit">Submit
             </button>
         </form>
     </div>
+    <script>
+        (function () {
+            const search = document.getElementById("armSettingsSearch");
+            const rows = document.querySelectorAll("#armSettingsGrid .arm-setting-row");
+            if (!search) return;
+            search.addEventListener("input", function () {
+                const query = this.value.trim().toLowerCase();
+                rows.forEach(function (row) {
+                    const text = (row.dataset.settingRow || "") + " " + (row.dataset.settingText || "");
+                    row.hidden = !text.includes(query);
+                });
+            });
+        })();
+    </script>
 {% endblock %}
