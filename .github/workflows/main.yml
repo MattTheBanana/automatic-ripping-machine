@@ -90,5 +90,10 @@ jobs:
         sudo mkdir -p /opt/arm/arm /opt/arm/setup
         sudo cp -r arm/migrations /opt/arm/arm
         cp setup/arm.yaml /opt/arm/setup/arm.yaml
+    - name: Test media naming helpers
+      if: matrix.python-version == '3.10'
+      env:
+        PYTHONPATH: .
+      run: pytest -q test/unittest/test_ripper_title_naming.py
     - name: Run A.R.M ui
       run: timeout 1 python ./arm/runui.py || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
