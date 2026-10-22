@@ -39,6 +39,11 @@ class TestMediaFolderNaming(unittest.TestCase):
         job = self.make_job("Spider-Man", year="2002", folder_id_type="tmdb", tmdb_id=None)
         self.assertEqual(fix_job_title(job), "Spider-Man (2002)")
 
+    def test_unidentified_disc_does_not_become_literal_placeholder_folder(self):
+        job = self.make_job("not identified", year="0000", folder_id_type="none")
+        job.label = "not identified"
+        self.assertEqual(fix_job_title(job), "Unknown Title")
+
 
 if __name__ == "__main__":
     unittest.main()
