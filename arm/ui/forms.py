@@ -42,7 +42,11 @@ class SettingsForm(FlaskForm):
     RAW_PATH = StringField('RAW_PATH', validators=[DataRequired()])
     TRANSCODE_PATH = StringField('TRANSCODE_PATH', validators=[DataRequired()])
     COMPLETED_PATH = StringField('COMPLETED_PATH', validators=[DataRequired()])
-    FOLDER_ID_TYPE = SelectField('FOLDER_ID_TYPE', choices=[('none', 'None'), ('tmdb', 'TMDB ID'), ('imdb', 'IMDb ID')], validators=[DataRequired()])
+    FOLDER_ID_TYPE = SelectField(
+        'FOLDER_ID_TYPE',
+        choices=[('none', 'None'), ('tmdb', 'TMDB ID'), ('imdb', 'IMDb ID')],
+        validators=[DataRequired()],
+    )
     submit = SubmitField('Submit')
 
 
