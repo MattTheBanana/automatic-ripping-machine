@@ -70,6 +70,16 @@ See: https://b3n.org/automatic-ripping-machine
 
 [For WSL Integration please see here]()
 
+## TrueNAS / custom image
+
+This fork publishes its x86-64 ARM image to GitHub Container Registry (GHCR):
+
+- Recommended moving tag: `ghcr.io/mattthebanana/arm-custom:latest`
+- Version-pinned tag: `ghcr.io/mattthebanana/arm-custom:2.24.4` (matches the repository `VERSION` file)
+- Compatibility tag: `ghcr.io/mattthebanana/arm-custom:makemkv-2.0.0`
+
+The image is built on `ghcr.io/mattthebanana/arm-dependencies-custom:2.0.0`. The custom image workflow republishes `latest`, the ARM version, and the compatibility tag when changes land on `main`. For TrueNAS to pull the image without credentials, make the GHCR package public; otherwise configure image-pull credentials in TrueNAS.
+
 ## Troubleshooting
  [Please see the wiki for troubleshooting](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/).
 
