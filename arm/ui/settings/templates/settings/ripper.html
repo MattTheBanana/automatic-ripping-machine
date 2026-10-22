@@ -8,11 +8,20 @@
                     <div class="input-group-prepend">
                         <span class="input-group-text" id="{{ k }}">{{ k }}: </span>
                     </div>
+{% if k == 'FOLDER_ID_TYPE' %}
+                    <select class="form-control" aria-label="{{ k }}" name="{{ k }}" aria-describedby="{{ k }}"
+                            {% if ripper_read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
+                        <option value="none" {% if v|string|lower == 'none' %}selected{% endif %}>None (standard naming)</option>
+                        <option value="tmdb" {% if v|string|lower == 'tmdb' %}selected{% endif %}>TMDB ID — [tmdbid-123]</option>
+                        <option value="imdb" {% if v|string|lower == 'imdb' %}selected{% endif %}>IMDb ID — [imdbid-tt1234567]</option>
+                    </select>
+                    {% else %}
                     <input type="text" class="form-control" aria-label="{{ k }}" name="{{ k }}"
                            placeholder="{{ v }}" value="{{ v }}" aria-describedby="{{ k }}"
                            {% if ripper_read_only %}
                              disabled="" title="arm.yaml is read-only"
                            {% endif %}>
+                    {% endif %}
                     <a class="popovers" onClick='return false;' href=""
                        data-content="{{ jsoncomments[k]| replace("#", "\n") }}" rel="popover"
                        data-placement="top" data-original-title="{{ k }}">
