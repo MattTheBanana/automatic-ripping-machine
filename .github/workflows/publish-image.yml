@@ -28,6 +28,8 @@ env:
 
 jobs:
   publish-docker-image:
+    # This workflow publishes the official Docker Hub image. The fork uses its GHCR workflow instead.
+    if: github.repository == 'automatic-ripping-machine/automatic-ripping-machine'
     runs-on: ubuntu-latest
     permissions: write-all
 
