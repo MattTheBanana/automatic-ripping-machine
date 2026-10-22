@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace
 
 from arm.ripper.utils import clean_for_filename, fix_job_title
+from arm.ui.utils import clean_for_filename as ui_clean_for_filename
 
 
 class TestMediaFolderNaming(unittest.TestCase):
@@ -19,6 +20,8 @@ class TestMediaFolderNaming(unittest.TestCase):
     def test_filename_cleaner_preserves_spaces_and_real_hyphens(self):
         self.assertEqual(clean_for_filename("The_Dark_Knight"), "The Dark Knight")
         self.assertEqual(clean_for_filename("Spider-Man: No Way Home"), "Spider-Man - No Way Home")
+        self.assertEqual(ui_clean_for_filename("Spider-Man: No Way Home"), "Spider-Man - No Way Home")
+        self.assertEqual(ui_clean_for_filename("The_Dark_Knight"), clean_for_filename("The_Dark_Knight"))
 
     def test_default_folder_name_does_not_add_provider_id(self):
         job = self.make_job("The_Dark_Knight", year="2008", folder_id_type="none", tmdb_id="155")
