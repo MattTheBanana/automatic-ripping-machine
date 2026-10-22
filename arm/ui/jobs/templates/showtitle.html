@@ -18,6 +18,7 @@
                                             title=results['Title'],
                                             year=results['Year'],
                                             imdbID=results['imdbID'],
+                                            tmdbID=results.get('tmdbID', ''),
                                             type=results['Type'],
                                             poster=results['Poster'],
                                             job_id=job_id) }}" class="btn btn-primary">Update Title</a>
