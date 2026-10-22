@@ -176,7 +176,9 @@ def fix_job_title(job):
     """
     raw_title = getattr(job, "title_manual", None) or getattr(job, "title", None)
     if not raw_title or str(raw_title).strip().lower() in ("none", "not identified"):
-        raw_title = getattr(job, "label", None) or "Unknown Title"
+        raw_title = getattr(job, "label", None)
+    if not raw_title or str(raw_title).strip().lower() in ("none", "not identified"):
+        raw_title = "Unknown Title"
     job_title = clean_for_filename(str(raw_title))
 
     year = getattr(job, "year", None)
