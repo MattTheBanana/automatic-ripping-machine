@@ -1,7 +1,11 @@
 name: "Version Increment (upstream only)"
 
 on:
-  workflow_dispatch:
+  pull_request:
+    types: [opened, edited, synchronize]
+    paths-ignore:
+      - 'arm_wiki/**'
+      - '.github/**'
 
 permissions:
   contents: write
