@@ -80,6 +80,18 @@ This fork publishes its x86-64 ARM image to GitHub Container Registry (GHCR):
 
 The image is built on `ghcr.io/mattthebanana/arm-dependencies-custom:2.0.0`. The custom image workflow republishes `latest`, the ARM version, and the compatibility tag when changes land on `main`. For TrueNAS to pull the image without credentials, make the GHCR package public; otherwise configure image-pull credentials in TrueNAS.
 
+### Media naming and Jellyfin matching
+
+The `FOLDER_ID_TYPE` setting is available under **Settings → Ripper ARM Settings**:
+
+- `none` (default): keep the normal `Title (Year)` naming.
+- `tmdb`: append a Jellyfin-compatible `[tmdbid-123]` identifier.
+- `imdb`: append a Jellyfin-compatible `[imdbid-tt1234567]` identifier.
+
+The selected identifier is added to both the output folder and the main movie filename when an ID is available. TMDB IDs are captured when TMDB is the metadata provider; with OMDb selected, set `TMDB_API_KEY` to allow ARM to resolve the TMDB ID from the IMDb ID. The folder-ID option defaults to `none`, and existing media is not renamed retroactively.
+
+ARM also normalizes disc-label underscores and illegal filename characters without converting every space into a hyphen, and it no longer shortens legitimate hyphenated titles during metadata fallback. See the [Jellyfin metadata identifier guide](https://jellyfin.org/docs/general/server/metadata/identifiers/).
+
 ## Troubleshooting
  [Please see the wiki for troubleshooting](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/).
 
