@@ -47,6 +47,116 @@ route_settings = Blueprint('route_settings', __name__,
 REDIRECT_SETTINGS = "route_settings.settings"
 
 
+# Human-readable titles for the advanced ripper configuration keys.
+_SETTING_LABELS = {
+    "ARM_NAME": "ARM Instance Name",
+    "ARM_CHILDREN": "Child ARM Servers",
+    "PREVENT_99": "Enable Track 99 Workaround",
+    "ARM_CHECK_UDF": "Check UDF Video Discs",
+    "UMASK": "File Creation Permission Mask",
+    "GET_VIDEO_TITLE": "Identify Video Titles",
+    "ARM_API_KEY": "ARM API Key",
+    "DISABLE_LOGIN": "Disable Login Requirement",
+    "FLASK_SECRET_KEY": "Flask Session Signing Key",
+    "SKIP_TRANSCODE": "Skip Transcoding",
+    "VIDEOTYPE": "Video Type",
+    "MINLENGTH": "Minimum Track Length (Seconds)",
+    "MAXLENGTH": "Maximum Track Length (Seconds)",
+    "MANUAL_WAIT": "Wait for Manual Identification",
+    "MANUAL_WAIT_TIME": "Manual Identification Timeout (Seconds)",
+    "DATE_FORMAT": "Date and Time Format",
+    "ALLOW_DUPLICATES": "Allow Duplicate Discs",
+    "MAX_CONCURRENT_TRANSCODES": "Maximum Concurrent Transcodes",
+    "MAX_CONCURRENT_MAKEMKVINFO": "Maximum Concurrent MakeMKV Info Jobs",
+    "DATA_RIP_PARAMETERS": "Data Disc Rip Parameters",
+    "METADATA_PROVIDER": "Metadata Provider",
+    "FOLDER_ID_TYPE": "Folder ID Naming Format",
+    "GET_AUDIO_TITLE": "Identify Audio CD Titles",
+    "RIP_POSTER": "Download Movie Posters",
+    "AUTO_EJECT": "Automatically Eject Discs",
+    "ABCDE_CONFIG_FILE": "abcde Configuration File",
+    "RAW_PATH": "Raw Rip Directory",
+    "TRANSCODE_PATH": "Transcode Output Directory",
+    "COMPLETED_PATH": "Completed Media Directory",
+    "EXTRAS_SUB": "Extras Filename Suffix",
+    "INSTALLPATH": "ARM Installation Path",
+    "LOGPATH": "Log Directory",
+    "LOGLEVEL": "Log Level",
+    "LOGLIFE": "Log Retention Period",
+    "DBFILE": "Database File Path",
+    "WEBSERVER_IP": "Web Server IP Address",
+    "WEBSERVER_PORT": "Web Server Port",
+    "UI_BASE_URL": "Web UI Base URL",
+    "SET_MEDIA_PERMISSIONS": "Set Media Permissions",
+    "CHMOD_VALUE": "Media File Permission Mode",
+    "SET_MEDIA_OWNER": "Set Media File Owner",
+    "CHOWN_USER": "Media Owner Username",
+    "CHOWN_GROUP": "Media Owner Group",
+    "MAKEMKV_PERMA_KEY": "MakeMKV Registration Key",
+    "RIPMETHOD": "Default Rip Method",
+    "RIPMETHOD_DVD": "DVD Rip Method",
+    "RIPMETHOD_BR": "Blu-ray Rip Method",
+    "MKV_ARGS": "MakeMKV Arguments",
+    "DELRAWFILES": "Delete Raw Rip Files",
+    "HB_PRESET_DVD": "DVD HandBrake Preset",
+    "HB_PRESET_BD": "Blu-ray HandBrake Preset",
+    "DEST_EXT": "Output File Extension",
+    "HANDBRAKE_CLI": "HandBrake CLI Path",
+    "HANDBRAKE_LOCAL": "Use Local HandBrake Binary",
+    "MAINFEATURE": "Main Feature Track Selection",
+    "HB_ARGS_DVD": "DVD HandBrake Arguments",
+    "HB_ARGS_BD": "Blu-ray HandBrake Arguments",
+    "FFMPEG_CLI": "FFmpeg CLI Path",
+    "FFMPEG_LOCAL": "Use Local FFmpeg Binary",
+    "FFMPEG_PRE_FILE_ARGS": "FFmpeg Arguments Before Input File",
+    "FFMPEG_POST_FILE_ARGS": "FFmpeg Arguments After Input File",
+    "USE_FFMPEG": "Use FFmpeg for Transcoding",
+    "EMBY_REFRESH": "Refresh Emby Library",
+    "EMBY_SERVER": "Emby Server Address",
+    "EMBY_PORT": "Emby Server Port",
+    "EMBY_CLIENT": "Emby Client Name",
+    "EMBY_DEVICE": "Emby Device Name",
+    "EMBY_DEVICEID": "Emby Device ID",
+    "EMBY_USERNAME": "Emby Username",
+    "EMBY_USERID": "Emby User ID",
+    "EMBY_PASSWORD": "Emby Password",
+    "EMBY_API_KEY": "Emby API Key",
+    "NOTIFY_RIP": "Notify After Ripping",
+    "NOTIFY_TRANSCODE": "Notify After Transcoding",
+    "NOTIFY_JOBID": "Include Job ID in Notifications",
+    "PB_KEY": "Pushbullet API Key",
+    "IFTTT_KEY": "IFTTT API Key",
+    "IFTTT_EVENT": "IFTTT Event Name",
+    "PO_USER_KEY": "Pushover User Key",
+    "PO_APP_KEY": "Pushover Application Key",
+    "BASH_SCRIPT": "Post-Processing Script",
+    "EMAIL_NOTIFICATION_METHOD": "Email Notification Method",
+    "SMTP_HOST": "SMTP Server Hostname",
+    "SMTP_PORT": "SMTP Server Port",
+    "SMTP_USERNAME": "SMTP Username",
+    "SMTP_PASSWORD": "SMTP Password",
+    "SMTP_SENDER_EMAIL": "SMTP Sender Email Address",
+    "SMTP_RECIPIENTS": "Email Recipients",
+    "SMTP_USE_TLS": "Use SMTP STARTTLS",
+    "SMTP_USE_SSL": "Use SMTP SSL/TLS",
+    "GMAIL_OAUTH_CLIENT_ID": "Gmail OAuth Client ID",
+    "GMAIL_OAUTH_CLIENT_SECRET": "Gmail OAuth Client Secret",
+    "GMAIL_OAUTH_REFRESH_TOKEN": "Gmail OAuth Refresh Token",
+    "GMAIL_SENDER_EMAIL": "Gmail Sender Email Address",
+    "GMAIL_RECIPIENTS": "Gmail Recipients",
+    "OMDB_API_KEY": "OMDb API Key",
+    "TMDB_API_KEY": "TMDB API Key",
+    "JSON_URL": "JSON Notification URL",
+    "APPRISE": "Apprise Configuration File",
+}
+
+
+def humanize_setting_name(value):
+    """Return a readable English label for a configuration key."""
+    key = str(value)
+    return _SETTING_LABELS.get(key, " ".join(word.capitalize() for word in key.replace("_", " ").split()))
+
+
 def mask_last(value, n=4):
     """
     Replaces the last `n` characters of a string with asterisks.
@@ -61,6 +171,7 @@ def is_read_only(path: os.PathLike) -> bool:
 
 
 route_settings.add_app_template_filter(mask_last, name='mask_last')
+route_settings.add_app_template_filter(humanize_setting_name, name='humanize_setting')
 
 
 @route_settings.route('/settings')
