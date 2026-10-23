@@ -234,15 +234,16 @@ class Job(db.Model):
         if self.disctype == "music":
             logging.debug("Disc is music.")
             self.label = music_brainz.main(self)
+        # BDMV must take precedence on hybrid Blu-ray discs that also expose VIDEO_TS.
+        elif _disc_dir_exists(self.mountpoint, "BDMV"):
+            logging.debug(f"Found: {self.mountpoint}/BDMV")
+            self.disctype = "bluray"
         elif _disc_dir_exists(self.mountpoint, "AUDIO_TS") and _listdir_safe(self.mountpoint + "/AUDIO_TS"):
             logging.debug(f"Found: {self.mountpoint}/AUDIO_TS")
             self.disctype = "data"
         elif _disc_dir_exists(self.mountpoint, "VIDEO_TS"):
             logging.debug(f"Found: {self.mountpoint}/VIDEO_TS")
             self.disctype = "dvd"
-        elif _disc_dir_exists(self.mountpoint, "BDMV"):
-            logging.debug(f"Found: {self.mountpoint}/BDMV")
-            self.disctype = "bluray"
         elif _disc_dir_exists(self.mountpoint, "HVDVD_TS"):
             logging.debug(f"Found: {self.mountpoint}/HVDVD_TS")
             # do something here

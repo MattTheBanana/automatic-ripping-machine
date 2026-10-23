@@ -29,24 +29,21 @@ function getRipperName(job, idsplit) {
 }
 
 function addJobItem(job, authenticated) {
-    // Local server or remote
-    const idsplit = job.job_id.split("_");
-    console.log(`${idsplit[1]} - ${idsplit[0]}`)
-    //Start creating the card with job id and header title
-    let x = `<div class="col-md-4" id="jobId${job.job_id}"><div class="card m-3  mx-auto" style="min-height: 420px;">`;
-    x += `<div class="card-header row no-gutters justify-content-center"><strong id="jobId${job.job_id}_header">${titleManual(job)}</strong></div>`;
-    // Main holder for the 3 sections of info - includes 1 section (Poster img)
-    // We need to check if idsplit is undefined, database page doesn't have splitid's
+    // Local server or remote.
+    const idsplit = String(job.job_id || "").split("_");
+    let x = `<div class="col-md-6 col-xl-4 arm-job-column" id="jobId${job.job_id}">`;
+    x += `<div class="card arm-job-card mx-auto">`;
+    x += `<div class="card-header text-center arm-job-card-header"><strong id="jobId${job.job_id}_header">${titleManual(job)}</strong></div>`;
+    x += `<div class="row no-gutters arm-job-card-content">`;
     if (idsplit[1] === undefined) {
-        x += `<div class="row no-gutters"><div class="col-lg-4"><a href="/jobdetail?job_id=${job.job_id}">${posterCheck(job)}</a></div>`;
+        x += `<div class="arm-job-poster-column"><a href="/jobdetail?job_id=${job.job_id}">${posterCheck(job)}</a></div>`;
     } else {
-        x += `<div class="row no-gutters"><div class="col-lg-4"><a href="${job.server_url}/jobdetail?job_id=${idsplit[1]}">${posterCheck(job)}</a></div>`;
+        x += `<div class="arm-job-poster-column"><a href="${job.server_url}/jobdetail?job_id=${idsplit[1]}">${posterCheck(job)}</a></div>`;
     }
-    // Section 2 (Middle)  Contains Job info (status, type, device, start time, progress)
     x += buildMiddleSection(job);
     x += buildRightSection(job, idsplit, authenticated);
-    // Close Job.card
-    x += "</div></div></div></div></div></div></div>";
+    // Close the content row, card, and outer grid column.
+    x += "</div></div></div>";
     return x;
 }
 
@@ -89,19 +86,12 @@ function musicCheck(job, idsplit) {
 }
 
 function posterCheck(job) {
-    let x;
     let image;
     if (job.poster_url !== "None" && job.poster_url !== "N/A") {
-        x = `<img id="jobId${job.job_id}_poster_url" alt="poster img" src="${job.poster_url}" width="240px" class="img-thumbnail">`;
-    } else {
-        if (job.video_type === "Music") {
-            image = 'music.png';
-        } else {
-            image = 'none.png';
-        }
-        x = `<img id="jobId${job.job_id}_poster_url" alt="poster img" src="/static/img/${image}" width="240px" class="img-thumbnail">`;
+        return `<img id="jobId${job.job_id}_poster_url" alt="Poster thumbnail" src="${job.poster_url}" class="img-thumbnail arm-job-poster" loading="lazy">`;
     }
-    return x;
+    image = job.video_type === "Music" ? "music.png" : "none.png";
+    return `<img id="jobId${job.job_id}_poster_url" alt="No poster available" src="/static/img/${image}" class="img-thumbnail arm-job-poster" loading="lazy">`;
 }
 
 function titleManual(job) {
@@ -115,52 +105,40 @@ function titleManual(job) {
 }
 
 function buildMiddleSection(job) {
-    let x;
-    x = "<div class=\"col-lg-4\"><div class=\"card-body px-1 py-1\">";
+    let x = "<div class=\"arm-job-info-column\"><div class=\"card-body px-2 py-2\">";
     x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${job.year}</div>`;
     x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${job.video_type}</div>`;
     x += `<div id="jobId${job.job_id}_devpath"><strong>Device: </strong>${job.devpath}</div>`;
-    x += `<div><strong>Status: </strong><img id="jobId${job.job_id}_status" 
-                               src="static/img/${job.status}.png" height="20px" alt="${job.status}" title="${job.status}"></div>`;
-    x += `<div id="jobId${job.job_id}_progress_section">${transcodingCheck(job)}</div></div></div>`;
+    x += `<div><strong>Status: </strong><img id="jobId${job.job_id}_status" class="arm-job-status-icon" src="/static/img/${job.status}.png" width="20" height="20" alt="${job.status}" title="${job.status}"></div>`;
+    x += `<div id="jobId${job.job_id}_progress_section">${transcodingCheck(job)}</div>`;
+    x += "</div></div>";
     return x;
 }
 
 function buildRightSection(job, idsplit, authenticated) {
-    let x;
-    // idsplit[1] should only be undefined on the /database page
+    // idsplit[1] is undefined on the database page; use its local job identifier.
     if (idsplit[1] === undefined) {
-        console.log("idsplit undefined... fixing");
         idsplit[0] = "0";
-        idsplit[1] = job.job_id
-    } else {
-        console.log(`idsplit ${idsplit[0]} - ${idsplit[1]}`);
+        idsplit[1] = job.job_id;
     }
-    // Section 3 (Right Top) Contains Config.values
-    x = "<div class=\"col-lg-4\"><div class=\"card-body px-1 py-1\">";
+    let x = "<div class=\"arm-job-actions-column\"><div class=\"card-body px-2 py-2\">";
     x += `<div id="jobId${job.job_id}_RIPPER"><strong>Ripper: </strong>${getRipperName(job, idsplit)}</div>`;
     x += `<div id="jobId${job.job_id}_RIPMETHOD"><strong>Rip Method: </strong>${job.config.RIPMETHOD}</div>`;
     x += `<div id="jobId${job.job_id}_MAINFEATURE"><strong>Main Feature: </strong>${job.config.MAINFEATURE}</div>`;
     x += `<div id="jobId${job.job_id}_MINLENGTH"><strong>Min Length: </strong>${job.config.MINLENGTH}</div>`;
     x += `<div id="jobId${job.job_id}_MAXLENGTH"><strong>Max Length: </strong>${job.config.MAXLENGTH}</div>`;
-    x += "</div>";
-    // Section 3 (Right Bottom) Contains Buttons for arm json api
-    // Only show when authenticated
-    x += `<div class="card-body px-2 py-1">`;
+    x += "</div><div class=\"card-body px-2 py-1 arm-job-actions\">";
     if (authenticated === true) {
-        x += `<div class="btn-group-vertical" role="group" aria-label="buttons" ${idsplit[0] !== "0" ? "style=\"display: none;\"" : ""}>
-              <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${idsplit[1]}" 
-              data-href="json?job=${idsplit[1]}&mode=abandon">Abandon Job</button>
-              <a href="logs?logfile=${job.logfile}&mode=full" class="btn btn-primary">View logfile</a>`;
+        x += `<div class="btn-group-vertical w-100" role="group" aria-label="Job actions" ${idsplit[0] !== "0" ? "style=\"display: none;\"" : ""}>`;
+        x += `<button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${idsplit[1]}" data-href="json?job=${idsplit[1]}&mode=abandon">Abandon Job</button>`;
+        x += `<a href="logs?logfile=${job.logfile}&mode=full" class="btn btn-primary">View logfile</a>`;
         x += musicCheck(job, idsplit);
-        x += `<button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="fixperms" 
-              data-jobid="${idsplit[1]}" data-href="json?mode=fixperms&job=${idsplit[1]}">Fix Permissions</button>`;
-        x += `</div>`;
+        x += `<button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="fixperms" data-jobid="${idsplit[1]}" data-href="json?mode=fixperms&job=${idsplit[1]}">Fix Permissions</button>`;
+        x += "</div>";
     }
-    x += `</div>`;
+    x += "</div></div>";
     return x;
 }
-
 
 function updateModal(modal, modalTitle = "", modalBody = "") {
     switch (actionType) {

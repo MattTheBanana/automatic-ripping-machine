@@ -85,3 +85,12 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 - Avoid parallel edits to shared files such as `arm/ui/__init__.py`, `arm/ripper/utils.py`, `setup/arm.yaml`, and `arm/ui/comments.json`; integrate changes to these files serially.
 - Before continuing after another agent pushes, fetch and integrate the updated branch. Never force-update a ref without checking its current head.
 - Put architecture/runtime decisions in the PR summary and keep this handover current.
+## Audit notes (October 2026)
+
+- The settings-save handler must bind to the `#ripperSettings` form (not the settings-tab element or submit button). The UI now reports failed save requests instead of silently ignoring them.
+- `arm/ui/security.py` creates and persists a cryptographically random Flask session key when no key is configured. Set `ARM_FLASK_SECRET_KEY` as an environment variable to keep it outside `arm.yaml`; writable config storage is needed for automatic persistence.
+- Do not reintroduce a fixed `WERKZEUG_DEBUG_PIN` or fixed Flask `SECRET_KEY`.
+- SQLite's connection timeout is configured to allow transient concurrent writes more time to complete. This is a mitigation for temporary lock contention, not a substitute for keeping SQLite on suitable local storage.
+- Disc identification checks `BDMV` before `VIDEO_TS` so hybrid discs remain identified as Blu-ray. Main-feature selection prioritizes runtime, then file size and chapter count, to avoid choosing a heavily chaptered short extra over the film.
+- Job-card HTML is generated in `arm/ui/static/js/common.js`; keep every opened wrapper closed exactly once. Posters and status indicators use dedicated classes with explicit size limits to avoid oversized artwork.
+- Ripper settings are grouped into collapsible sections with live filtering. If adding a new setting, update `setup/arm.yaml` and `arm/ui/comments.json`; the section assignment in `settings/ripper.html` may also need updating.

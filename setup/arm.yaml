@@ -41,6 +41,10 @@ ARM_API_KEY: ""
 # ARMui will need to be restared for this to update
 DISABLE_LOGIN: false
 
+# Flask session signing key. Leave blank to generate and save a strong random key.
+# Alternatively set ARM_FLASK_SECRET_KEY in the container environment.
+FLASK_SECRET_KEY: ""
+
 # Skip transcoding if you want the original MakeMKV files as your final output
 # This will produce the highest quality videos (and use the most storage)
 # Note: RIPMETHOD must be set to "mkv" for this feature to work
