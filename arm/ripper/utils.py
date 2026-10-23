@@ -29,6 +29,7 @@ from arm.models.user import User
 from arm.models.system_drives import SystemDrives
 from arm.ripper import apprise_bulk
 from arm.gmail_notifications import send_gmail_notification
+from arm.smtp_notifications import send_smtp_notification
 from arm.media_metadata import detect_disc_metadata, safe_positive_int
 
 NOTIFY_TITLE = "ARM notification"
@@ -62,12 +63,18 @@ def notify(job, title: str, body: str):
 
     bash_notify(cfg.arm_config, title, body)
 
-    # Gmail OAuth is an independent notifier; misconfiguration must not affect
-    # ripping or stop any other configured notification provider.
+    # Email transport is configurable and independent from the other providers.
+    # Select exactly one transport so one event never sends duplicate emails.
+    email_method = str(cfg.arm_config.get("EMAIL_NOTIFICATION_METHOD", "gmail_oauth")).strip().lower()
     try:
-        send_gmail_notification(title, body, cfg.arm_config)
+        if email_method == "smtp":
+            send_smtp_notification(title, body, cfg.arm_config)
+        elif email_method == "gmail_oauth":
+            send_gmail_notification(title, body, cfg.arm_config)
+        elif email_method not in ("", "none"):
+            logging.warning("Unknown email notification method: %s", email_method)
     except Exception as error:
-        logging.warning("Gmail OAuth notification could not be sent: %s", error)
+        logging.warning("Email notification could not be sent: %s", type(error).__name__)
 
     # Sent to remote sites
     # Create an Apprise instance

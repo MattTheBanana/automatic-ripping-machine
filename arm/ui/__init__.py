@@ -81,6 +81,10 @@ app.register_blueprint(route_jobs)
 app.register_blueprint(route_sendmovies)
 app.register_blueprint(route_notifications)
 
+# Keep JSON/AJAX endpoints separate from browser page blueprints.
+from arm.api.routes import route_api  # noqa: E402,F811
+app.register_blueprint(route_api)
+
 # Remove GET/page loads from logging
 import logging  # noqa: E402,F811
 logging.getLogger('werkzeug').setLevel(logging.ERROR)

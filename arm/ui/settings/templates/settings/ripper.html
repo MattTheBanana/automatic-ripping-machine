@@ -23,10 +23,17 @@
                         <option value="tmdb" {% if v|string|lower == 'tmdb' %}selected{% endif %}>TMDB ID — [tmdbid-123]</option>
                         <option value="imdb" {% if v|string|lower == 'imdb' %}selected{% endif %}>IMDb ID — [imdbid-tt1234567]</option>
                     </select>
-                    {% elif k in ['GMAIL_OAUTH_CLIENT_SECRET', 'GMAIL_OAUTH_REFRESH_TOKEN'] %}
+                    {% elif k == 'EMAIL_NOTIFICATION_METHOD' %}
+                    <select class="form-control" aria-label="{{ k }}" name="{{ k }}" aria-describedby="{{ k }}"
+                            {% if ripper_read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
+                        <option value="none" {% if v|string|lower == 'none' %}selected{% endif %}>Disabled</option>
+                        <option value="smtp" {% if v|string|lower == 'smtp' %}selected{% endif %}>SMTP / app password</option>
+                        <option value="gmail_oauth" {% if v|string|lower == 'gmail_oauth' %}selected{% endif %}>Gmail API / OAuth</option>
+                    </select>
+                    {% elif k in ['GMAIL_OAUTH_CLIENT_SECRET', 'GMAIL_OAUTH_REFRESH_TOKEN', 'SMTP_PASSWORD'] %}
                     <input type="password" class="form-control" aria-label="{{ k }}" name="{{ k }}"
                            value="" autocomplete="new-password"
-                           placeholder="{% if v %}Configured — leave blank to keep the saved value{% else %}Enter OAuth credential{% endif %}"
+                           placeholder="{% if v %}Configured — leave blank to keep the saved value{% elif k == 'SMTP_PASSWORD' %}Enter SMTP password or app password{% else %}Enter OAuth credential{% endif %}"
                            aria-describedby="{{ k }}"
                            {% if ripper_read_only %}
                              disabled="" title="arm.yaml is read-only"

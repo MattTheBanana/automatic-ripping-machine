@@ -97,9 +97,30 @@ Disc labels can also provide title metadata and optional TV mapping. For example
 The title search and manual-title pages include editable season/disc controls and a two-ended episode-range slider. The mapping is saved with the job and only adds episode labels when that information is present or explicitly selected.
 
 
-### Gmail OAuth notifications
+### Email notifications
 
-ARM can send notifications through the Gmail API using OAuth 2.0 without an app password. Leave all Gmail fields blank to keep this feature disabled. In **Settings → Ripper Settings**, configure:
+Choose **Settings → Ripper Settings → EMAIL_NOTIFICATION_METHOD** to select one provider: `none`, `smtp`, or `gmail_oauth`. The default preserves existing Gmail OAuth behavior. Email failures are isolated from ripping and other providers.
+
+#### SMTP with an app password
+
+SMTP is the simpler choice for Gmail and other SMTP providers. For Gmail, enable 2-Step Verification and create an app password in your Google account. Use the app password, not your normal account password.
+
+Configure these fields under **Settings → Ripper Settings**:
+
+- **SMTP_HOST**: `smtp.gmail.com` for Gmail.
+- **SMTP_PORT**: `587` for STARTTLS or commonly `465` for implicit TLS.
+- **SMTP_USERNAME**: your full email address.
+- **SMTP_PASSWORD**: your app password or provider SMTP password.
+- **SMTP_SENDER_EMAIL**: sender address; normally your mailbox address.
+- **SMTP_RECIPIENTS**: comma- or semicolon-separated addresses.
+- **SMTP_USE_TLS**: `true` for STARTTLS, normally with port 587.
+- **SMTP_USE_SSL**: `true` for implicit TLS, normally with port 465. Do not set both TLS flags.
+
+The SMTP password input is hidden. Leaving it blank preserves the saved credential. Providers that do not require authentication can leave username and password empty.
+
+#### Gmail API with OAuth 2.0
+
+ARM can also send notifications through the Gmail API using OAuth without an app password. Select `gmail_oauth` above and configure:
 
 - **GMAIL_OAUTH_CLIENT_ID** and **GMAIL_OAUTH_CLIENT_SECRET** from your Google Cloud OAuth client.
 - **GMAIL_OAUTH_REFRESH_TOKEN** generated after granting the client the scope https://www.googleapis.com/auth/gmail.send with offline access.

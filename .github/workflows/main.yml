@@ -94,6 +94,6 @@ jobs:
       if: matrix.python-version == '3.10'
       env:
         PYTHONPATH: .
-      run: pytest -q test/unittest/test_ripper_title_naming.py test/unittest/test_gmail_notifications.py
+      run: pytest -q test/unittest/test_ripper_title_naming.py test/unittest/test_gmail_notifications.py test/unittest/test_smtp_notifications.py
     - name: Run A.R.M ui
       run: timeout 1 python ./arm/runui.py || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
