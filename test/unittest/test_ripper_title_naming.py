@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from arm.ripper.utils import clean_for_filename, fix_job_title
 from arm.ui.utils import clean_for_filename as ui_clean_for_filename
-from arm.media_metadata import parse_media_label, title_search_variants
+from arm.media_metadata import parse_media_label, select_best_media_result, title_search_variants
 
 
 class TestMediaFolderNaming(unittest.TestCase):
@@ -48,6 +48,14 @@ class TestMediaFolderNaming(unittest.TestCase):
     def test_title_variants_split_joined_words(self):
         self.assertIn("sherlock holmes", [v.lower() for v in title_search_variants("sherlockholmes")])
         self.assertIn("my hero academia", [v.lower() for v in title_search_variants("Myheroacademia")])
+
+    def test_automatic_matching_prefers_exact_show_title_over_fuzzy_movie(self):
+        results = [
+            {"Title": "My Hero Academia: Two Heroes", "Year": "2018", "Type": "movie"},
+            {"Title": "My Hero Academia", "Year": "2016", "Type": "series"},
+        ]
+        selected = select_best_media_result(results, title="My Hero Academia", prefer_series=False)
+        self.assertEqual(selected["Type"], "series")
 
     def test_disc_label_parser_extracts_given_details_without_guessing(self):
         jump = parse_media_label("21_JUMP_STREET_2012")

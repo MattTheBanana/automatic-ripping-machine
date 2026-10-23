@@ -19,7 +19,7 @@ from arm.models import Job
 from arm.ripper import utils
 from arm.ripper.ProcessHandler import arm_subprocess
 from arm.ui import db
-from arm.media_metadata import parse_media_label
+from arm.media_metadata import parse_media_label, select_best_media_result
 
 # flake8: noqa: W605
 from arm.ui import utils as ui_utils
@@ -324,18 +324,16 @@ def update_job(job, search_results):
     if not search_results or "Search" not in search_results or not search_results["Search"]:
         return None
 
-    candidates = search_results["Search"]
-    # An explicit season/episode marker is strong evidence for a TV title. Do not
-    # let a same-name movie sort ahead of it just because movie search ran first.
-    if getattr(job, "season_number", None) or getattr(job, "episode_start", None):
-        series_candidates = [
-            candidate for candidate in candidates
-            if str(candidate.get("Type", "")).lower() in ("series", "tv")
-        ]
-        if series_candidates:
-            candidates = series_candidates
-
-    result = candidates[0]
+    parsed_label = parse_media_label(getattr(job, "label", None))
+    selected = select_best_media_result(
+        search_results["Search"],
+        title=parsed_label.get("title") or job.title,
+        year=parsed_label.get("year") or job.year,
+        prefer_series=bool(getattr(job, "season_number", None) or getattr(job, "episode_start", None)),
+    )
+    if selected is None:
+        return None
+    result = selected
     new_year = result.get("Year", "")
     title = utils.clean_for_filename(result.get("Title", ""))
     imdb_id = result.get("imdbID")

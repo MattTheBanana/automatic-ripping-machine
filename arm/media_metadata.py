@@ -142,6 +142,37 @@ def detect_disc_metadata(*values):
     return result
 
 
+def select_best_media_result(results, title=None, year=None, prefer_series=False):
+    """Prefer exact title/year matches and respect explicit TV episode metadata."""
+    candidates = list(results or [])
+    if not candidates:
+        return None
+
+    def normalized(value):
+        return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+
+    exact_title = [
+        item for item in candidates
+        if normalized(item.get("Title") or item.get("title") or item.get("name")) == normalized(title)
+    ] if title else []
+    pool = exact_title or candidates
+    if year:
+        year_matches = [
+            item for item in pool
+            if str(item.get("Year") or "")[:4] == str(year)[:4]
+        ]
+        if year_matches:
+            pool = year_matches
+
+    if prefer_series:
+        series = [item for item in pool if str(item.get("Type", "")).lower() in ("series", "tv")]
+        if not series:
+            series = [item for item in candidates if str(item.get("Type", "")).lower() in ("series", "tv")]
+        if series:
+            return series[0]
+    return pool[0]
+
+
 def parse_media_label(label):
     """Parse title/year/disc data present in a label without inventing missing metadata."""
     raw = str(label or "").strip()
