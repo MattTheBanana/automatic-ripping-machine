@@ -24,10 +24,57 @@ from arm.models.job import Job, JobState
 from arm.models.notifications import Notifications
 import arm.config.config as cfg
 from arm.ui.forms import TitleSearchForm, ChangeParamsForm, TrackFormDynamic
+from arm.media_metadata import parse_media_label, detect_disc_metadata, safe_positive_int
 
 route_jobs = Blueprint('route_jobs', __name__,
                        template_folder='templates',
                        static_folder='../static')
+
+_DISC_METADATA_FIELDS = ("season_number", "disc_number", "episode_start", "episode_end")
+
+
+def _disc_metadata_values(job, params=None):
+    detected = detect_disc_metadata(
+        getattr(job, "label", None), getattr(job, "title", None), getattr(job, "title_auto", None)
+    )
+    values = {}
+    explicit_form = params is not None and params.get("metadata_controls")
+    for field in _DISC_METADATA_FIELDS:
+        submitted = params is not None and field in params and (params.get(field) != "" or explicit_form)
+        if submitted:
+            raw_value = params.get(field)
+        else:
+            raw_value = getattr(job, field, None)
+            if raw_value in (None, ""):
+                raw_value = detected.get(field)
+        maximum = 99 if field in ("season_number", "disc_number") else 999
+        values[field] = safe_positive_int(raw_value, maximum)
+    start, end = values["episode_start"], values["episode_end"]
+    if start and end and end < start:
+        values["episode_start"], values["episode_end"] = end, start
+    return values
+
+
+def _metadata_query_args(values):
+    return {field: ("" if values.get(field) is None else str(values[field]))
+            for field in _DISC_METADATA_FIELDS}
+
+
+def _save_disc_metadata(job, values):
+    for field in _DISC_METADATA_FIELDS:
+        setattr(job, field, values.get(field))
+
+
+def _label_title_year(job):
+    parsed = parse_media_label(getattr(job, "label", None))
+    current_title = str(getattr(job, "title", "") or "").strip()
+    label = str(getattr(job, "label", "") or "").strip()
+    if not current_title or current_title == label or current_title.lower() in ("none", "not identified"):
+        title = parsed.get("title") or current_title
+    else:
+        title = current_title
+    year = getattr(job, "year", None) or parsed.get("year") or ""
+    return title or "", year
 
 
 @route_jobs.route('/jobdetail')
@@ -120,132 +167,128 @@ def jobdetail_load():
 @route_jobs.route('/titlesearch')
 @login_required
 def title_search():
-    """
-    The initial search page
-    """
-    job_id = request.args.get('job_id')
+    """Search metadata for movies and TV series."""
+    job_id = request.args.get("job_id")
     job = Job.query.get(job_id)
+    if job is None:
+        raise ValidationError(constants.NO_JOB)
     form = TitleSearchForm(request.args)
+    suggested_title, suggested_year = _label_title_year(job)
+    metadata_values = _disc_metadata_values(job, request.args)
     if form.validate():
-        flash(f'Search for {request.args.get("title")}, year={request.args.get("year")}', 'success')
-        return redirect(url_for('route_jobs.list_titles', title=request.args.get("title"),
-                                year=request.args.get("year"), job_id=job_id))
-    return render_template('titlesearch.html', title='Update Title', form=form, job=job)
-
+        title = request.args.get("title", "").strip()
+        year = request.args.get("year", "").strip()
+        return redirect(url_for(
+            "route_jobs.list_titles", title=title, year=year, job_id=job_id,
+            **_metadata_query_args(metadata_values), metadata_controls="1"
+        ))
+    return render_template("titlesearch.html", title="Search metadata", form=form, job=job,
+                           suggested_title=suggested_title, suggested_year=suggested_year,
+                           **metadata_values)
 
 @route_jobs.route('/customTitle')
 @login_required
 def customtitle():
-    """
-    For setting custom title for series with multiple discs
-    """
-    job_id = request.args.get('job_id')
+    """Manually set title/year with optional season, disc and episode mapping."""
+    job_id = request.args.get("job_id")
     ui_utils.job_id_validator(job_id)
     job = Job.query.get(job_id)
+    if job is None:
+        raise ValidationError("Job not found")
     form = TitleSearchForm(obj=job)
-    if request.args.get("title"):
-        args = {
-            'title': request.args.get("title"),
-            'title_manual': request.args.get("title"),
-            'year': request.args.get("year")
-        }
-        notification = Notifications(f"Job: {job.job_id} was updated",
-                                     f'Title: {job.title} ({job.year}) was updated to '
-                                     f'{request.args.get("title")} ({request.args.get("year")})')
-        db.session.add(notification)
-        ui_utils.database_updater(args, job)
-        flash(f'Custom title changed. Title={job.title}, Year={job.year}.', "success")
-        return redirect(url_for('home'))
-    return render_template('customTitle.html', title='Change Title', form=form, job=job)
-
+    suggested_title, suggested_year = _label_title_year(job)
+    metadata_values = _disc_metadata_values(job, request.args)
+    title = request.args.get("title", "").strip()
+    if title:
+        old_title, old_year = job.title, job.year
+        new_title = ui_utils.clean_for_filename(title)
+        new_year = request.args.get("year") or None
+        same_title = re.sub(r"[^a-z0-9]", "", new_title.casefold()) == re.sub(
+            r"[^a-z0-9]", "", str(job.title or "").casefold()
+        )
+        imdb_id, tmdb_id = ui_utils.resolve_media_ids(
+            new_title, new_year,
+            request.args.get("imdbID") or (job.imdb_id if same_title else None),
+            request.args.get("tmdbID") or (job.tmdb_id if same_title else None),
+            request.args.get("type") or job.video_type
+        )
+        _save_disc_metadata(job, metadata_values)
+        ui_utils.database_updater({
+            "title": new_title, "title_manual": new_title, "year": new_year, "year_manual": new_year,
+            "imdb_id": imdb_id, "imdb_id_manual": imdb_id, "tmdb_id": tmdb_id, "hasnicetitle": True,
+        }, job)
+        db.session.add(Notifications(
+            f"Job: {job.job_id} was updated",
+            f"Title: {old_title} ({old_year}) was updated to {new_title} ({new_year})"
+        ))
+        db.session.commit()
+        flash(f"Custom title changed. Title={job.title}, Year={job.year}.", "success")
+        return redirect(url_for("home"))
+    return render_template("customTitle.html", title="Change Title", form=form, job=job,
+                           suggested_title=suggested_title, suggested_year=suggested_year,
+                           **metadata_values)
 
 @route_jobs.route('/gettitle')
 @route_jobs.route('/select_title')
 @login_required
 def gettitle():
-    """
-    Used to display plot info from the search result page when the user clicks the title
-    and to forward the user to save the selected details
-
-    This was also used previously for the getdetails page but it no longer needed there
-    """
-    imdb_id = request.args.get('imdbID').strip() if request.args.get('imdbID') else None
-    job_id = request.args.get('job_id').strip() if request.args.get('job_id') else None
-    if imdb_id == "" or imdb_id is None:
-        app.logger.debug("gettitle - no imdb supplied")
-        flash("No imdb supplied", "danger")
-        raise ValidationError("No imdb supplied")
-    if job_id == "" or job_id is None:
-        app.logger.debug("gettitle - no job supplied")
+    """Display the selected metadata record, movie or series."""
+    imdb_id = request.args.get("imdbID", "").strip() or None
+    tmdb_id = request.args.get("tmdbID", "").strip() or None
+    job_id = request.args.get("job_id", "").strip()
+    if not job_id:
         flash(constants.NO_JOB, "danger")
         raise ValidationError(constants.NO_JOB)
-    dvd_info = ui_utils.metadata_selector("get_details", None, None, imdb_id)
-    return render_template('showtitle.html', results=dvd_info, job_id=job_id)
-
+    job = Job.query.get(job_id)
+    if job is None:
+        raise ValidationError("Job not found")
+    if imdb_id:
+        details = ui_utils.metadata_selector("get_details", None, None, imdb_id)
+    elif tmdb_id:
+        details = ui_utils.tmdb_details(tmdb_id, request.args.get("type", "movie"))
+    else:
+        flash("No provider ID was supplied for this result", "danger")
+        return redirect(url_for("route_jobs.title_search", job_id=job_id))
+    if not details:
+        flash("Could not retrieve metadata for the selected title", "danger")
+        return redirect(url_for("route_jobs.title_search", job_id=job_id))
+    return render_template("showtitle.html", results=details, job_id=job_id,
+                           **_disc_metadata_values(job, request.args))
 
 @route_jobs.route('/updatetitle')
 @login_required
 def updatetitle():
-    """
-    used to save the details from the search
-    Example URL
-    updatetitle?title=Home&amp;year=2015&amp;imdbID=tt2224026&amp;type=movie&amp;
-    poster=http://image.tmdb.org/t/p/original/usFenYnk6mr8C62dB1MoAfSWMGR.jpg&amp;job_id=109
-
-    args
-    title - new movie title
-    year - new movie year
-    imdbID - new movie IMDB reference
-    type - new movie type
-    poster - new movie poster URL
-    job_id - job to update
-    """
-    #
-
-    job_id = request.args.get('job_id')
+    """Persist the selected movie/show, identifiers, and explicit episode metadata."""
+    job_id = request.args.get("job_id")
     job = Job.query.get(job_id)
-    old_title = job.title
-    old_year = job.year
-    app.logger.debug(f"Old Title and Year: {old_title}, {old_year}")
-
-    app.logger.debug(f"New Title: {request.args.get('title')}")
-    new_title = ui_utils.clean_for_filename(request.args.get('title'))
-    app.logger.debug(f"Cleaned New Title: {new_title}")
+    if job is None:
+        raise ValidationError("Job not found")
+    old_title, old_year = job.title, job.year
+    title = request.args.get("title", "").strip()
+    if not title:
+        flash("A title is required", "danger")
+        return redirect(url_for("route_jobs.title_search", job_id=job_id))
+    new_title = ui_utils.clean_for_filename(title)
+    new_year = request.args.get("year") or None
+    media_type = request.args.get("type") or job.video_type
+    imdb_id, tmdb_id = ui_utils.resolve_media_ids(
+        new_title, new_year, request.args.get("imdbID"), request.args.get("tmdbID"), media_type
+    )
     job.title = job.title_manual = new_title
-
-    app.logger.debug(f"New Year: {request.args.get('year')}")
-    app.logger.debug(f"New Type: {request.args.get('type')}")
-    app.logger.debug(f"New IMDB: {request.args.get('imdbID')}")
-    app.logger.debug(f"New Poster: {request.args.get('poster')}")
-
-    job.year = job.year_manual = request.args.get('year')
-    job.video_type = job.video_type_manual = request.args.get('type')
-    imdb_id = request.args.get('imdbID')
-    tmdb_id = request.args.get('tmdbID')
-    if (not tmdb_id
-            and str(cfg.arm_config.get('FOLDER_ID_TYPE', 'none')).lower() == 'tmdb'
-            and imdb_id
-            and cfg.arm_config.get('TMDB_API_KEY')):
-        try:
-            tmdb_details = ui_utils.tmdb_find(imdb_id)
-            tmdb_id = tmdb_details.get('tmdbID') if tmdb_details else None
-        except Exception as error:
-            app.logger.warning("Could not resolve TMDB ID for %s: %s", imdb_id, error)
-
+    job.year = job.year_manual = new_year
+    job.video_type = job.video_type_manual = media_type
     job.imdb_id = job.imdb_id_manual = imdb_id
     job.tmdb_id = tmdb_id
-    job.poster_url = job.poster_url_manual = request.args.get('poster')
-
+    job.poster_url = job.poster_url_manual = request.args.get("poster")
     job.hasnicetitle = True
-    notification = Notifications(f"Job: {job.job_id} was updated",
-                                 f'Title: {old_title} ({old_year}) was updated to '
-                                 f'{request.args.get("title")} ({request.args.get("year")})')
-    db.session.add(notification)
+    _save_disc_metadata(job, _disc_metadata_values(job, request.args))
+    db.session.add(Notifications(
+        f"Job: {job.job_id} was updated",
+        f"Title: {old_title} ({old_year}) was updated to {new_title} ({new_year})"
+    ))
     db.session.commit()
-    flash(f'Title: {old_title} ({old_year}) was updated to '
-          f'{request.args.get("title")} ({request.args.get("year")})', "success")
+    flash(f"Title: {old_title} ({old_year}) was updated to {new_title} ({new_year})", "success")
     return redirect("/")
-
 
 @route_jobs.route('/activerips')
 @login_required
@@ -273,33 +316,32 @@ def changeparams():
 @route_jobs.route('/list_titles')
 @login_required
 def list_titles():
-    """
-    The search results page
-
-    This will display the returned search results from OMDB or TMDB from the users input search
-    """
-    title = request.args.get('title').strip() if request.args.get('title') else ''
-    year = request.args.get('year').strip() if request.args.get('year') else ''
-    job_id = request.args.get('job_id').strip() if request.args.get('job_id') else ''
-    if job_id == "":
-        app.logger.debug("list_titles - no job supplied")
+    """Search-results page for movies and TV series."""
+    title = request.args.get("title", "").strip()
+    year = request.args.get("year", "").strip()
+    job_id = request.args.get("job_id", "").strip()
+    if not job_id:
         flash(constants.NO_JOB, "danger")
-        raise ValidationError
+        raise ValidationError(constants.NO_JOB)
     job = Job.query.get(job_id)
+    if job is None:
+        raise ValidationError("Job not found")
     form = TitleSearchForm(obj=job)
+    metadata_values = _disc_metadata_values(job, request.args)
     search_results = ui_utils.metadata_selector("search", title, year)
-    if search_results is None or 'Error' in search_results or (
-            'Search' in search_results and len(search_results['Search']) < 1):
-        app.logger.debug("No results found. Trying without year")
-        flash(f"No search results found for {title} ({year})<br/> Trying without year", 'danger')
+    if search_results is None or "Error" in search_results or (
+            "Search" in search_results and not search_results["Search"]):
+        flash(f"No search results found for {title} ({year}); trying without year", "danger")
         search_results = ui_utils.metadata_selector("search", title, "")
-
-    if search_results is None or 'Error' in search_results or (
-            'Search' in search_results and len(search_results['Search']) < 1):
-        flash(f"No search results found for {title}", 'danger')
-    return render_template('list_titles.html', results=search_results, job_id=job_id,
-                           form=form, title=title, year=year)
-
+    if search_results is None or "Error" in search_results or (
+            "Search" in search_results and not search_results["Search"]):
+        flash(f"No search results found for {title}", "danger")
+        search_results = {"Search": []}
+    suggested_title, suggested_year = _label_title_year(job)
+    return render_template("list_titles.html", results=search_results, job_id=job_id, form=form,
+                           title=title or suggested_title, year=year or suggested_year,
+                           suggested_title=suggested_title, suggested_year=suggested_year,
+                           **metadata_values)
 
 @route_jobs.route('/json', methods=['GET'])
 def feed_json():

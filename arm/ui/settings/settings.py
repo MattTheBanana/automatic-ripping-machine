@@ -198,6 +198,29 @@ def save_settings():
                 settings_file.close()
             success = True
             importlib.reload(cfg)
+            # Jobs snapshot settings into a per-job Config row; synchronize active
+            # jobs so a changed folder-ID policy applies to jobs already running.
+            id_type = str(cfg.arm_config.get("FOLDER_ID_TYPE", "none")).strip().lower()
+            try:
+                active_jobs = Job.query.filter(Job.status.notin_(["success", "fail"])).all()
+                for active_job in active_jobs:
+                    if active_job.config is not None:
+                        active_job.config.FOLDER_ID_TYPE = id_type
+                    if (id_type == "tmdb" and not active_job.tmdb_id
+                            and active_job.imdb_id and cfg.arm_config.get("TMDB_API_KEY")):
+                        try:
+                            details = ui_utils.tmdb_find(active_job.imdb_id)
+                            if details:
+                                active_job.tmdb_id = details.get("tmdbID") or (
+                                    str(details["results"][0].get("id")) if details.get("results") else None
+                                )
+                        except Exception as error:
+                            app.logger.warning("Could not resolve TMDB ID for job %s: %s",
+                                               active_job.job_id, error)
+                db.session.commit()
+            except Exception as error:
+                db.session.rollback()
+                app.logger.error("Could not sync naming policy to active jobs: %s", error)
             # Set the ARM Log level to the config
             app.logger.info(f"Setting log level to: {cfg.arm_config['LOGLEVEL']}")
             app.logger.setLevel(cfg.arm_config['LOGLEVEL'])
