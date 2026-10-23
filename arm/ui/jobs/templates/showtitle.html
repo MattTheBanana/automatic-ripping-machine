@@ -5,30 +5,32 @@
 
 {% block content %}
 <div class="container">
-    <div class="row">
-        <div class="col-sm-3"></div>
-            <div class="col-sm-6 text-center">
-                <div class="card text-center">
-                    <div class="card-header"><a href="select_title?imdbID={{ results["imdbID"] }}&job_id={{ job_id }}"><img src="{{ results["Poster"] }}" width="240px" class="img-thumbnail" alt="Poster Image"></a></div>
-                    <div class="card-body"><strong>{{  results["Title"]  }}</strong> - {{ results["Type"].capitalize() }} ({{ results["Year"] }})</div>
-                    <div class="card-body"><strong>Full Plot:</strong> {{ results["Plot"] }}</div>
-                    <div class="card-footer">
-						<a href="titlesearch?job_id={{ job_id }}" class="btn btn-primary">New Search</a>   
-                        <a href="{{ url_for('route_jobs.updatetitle',
-                                            title=results['Title'],
-                                            year=results['Year'],
-                                            imdbID=results['imdbID'],
-                                            tmdbID=results.get('tmdbID', ''),
-                                            type=results['Type'],
-                                            poster=results['Poster'],
-                                            job_id=job_id) }}" class="btn btn-primary">Update Title</a>
-                    </div>
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-9 col-lg-7">
+            <div class="card text-center">
+                {% if results.get("Poster") %}<div class="card-header"><img src="{{ results.get('Poster') }}" class="img-fluid arm-selected-poster" alt="Poster for {{ results.get('Title', 'media') }}"></div>{% endif %}
+                <div class="card-body"><strong>{{ results.get("Title", "Unknown title") }}</strong> — {{ results.get("Type", "media")|capitalize }}{% if results.get("Year") %} ({{ results.get("Year") }}){% endif %}</div>
+                <div class="card-body"><strong>Plot:</strong> {{ results.get("Plot", "No plot available.") }}</div>
+                <div class="card-footer d-flex flex-wrap justify-content-center">
+                    <a href="{{ url_for('route_jobs.title_search', job_id=job_id,
+                        season_number=season_number if season_number is not none else '',
+                        disc_number=disc_number if disc_number is not none else '',
+                        episode_start=episode_start if episode_start is not none else '',
+                        episode_end=episode_end if episode_end is not none else '',
+                        metadata_controls='1') }}" class="btn btn-outline-secondary m-1">New search</a>
+                    <a href="{{ url_for('route_jobs.updatetitle', title=results.get('Title', ''),
+                        year=results.get('Year', ''), imdbID=results.get('imdbID', ''),
+                        tmdbID=results.get('tmdbID', ''), type=results.get('Type', 'movie'),
+                        poster=results.get('Poster', ''), job_id=job_id,
+                        season_number=season_number if season_number is not none else '',
+                        disc_number=disc_number if disc_number is not none else '',
+                        episode_start=episode_start if episode_start is not none else '',
+                        episode_end=episode_end if episode_end is not none else '',
+                        metadata_controls='1') }}" class="btn btn-primary m-1">Update title</a>
                 </div>
             </div>
-        <div class="col-sm-3"></div>     
+        </div>
     </div>
 </div>
-
-
-
 {% endblock %}
+

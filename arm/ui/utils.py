@@ -28,7 +28,7 @@ from arm.models.system_info import SystemInfo
 from arm.models.ui_settings import UISettings
 from arm.models.user import User
 from arm.ui import app, db
-from arm.ui.metadata import tmdb_search, get_tmdb_poster, tmdb_find, call_omdb_api
+from arm.ui.metadata import tmdb_search, get_tmdb_poster, tmdb_find, tmdb_details, call_omdb_api
 from arm.ui.settings import DriveUtils
 
 # Path definitions
@@ -481,6 +481,102 @@ def job_dupe_check(crc_id):
         return True, return_results
     app.logger.debug("jobs is none or len(r) is 0 - we have no jobs")
     return False, None
+
+
+def resolve_media_ids(title, year=None, imdb_id=None, tmdb_id=None, media_type=None):
+    """Resolve provider IDs from exact title/year/type matches; never attach a fuzzy ID."""
+    id_type = str(cfg.arm_config.get("FOLDER_ID_TYPE", "none")).strip().lower()
+    if id_type not in ("imdb", "tmdb"):
+        return imdb_id, tmdb_id
+
+    def valid_imdb(value):
+        return bool(value and re.fullmatch(r"tt\d+", str(value).strip(), re.IGNORECASE))
+
+    def valid_tmdb(value):
+        return bool(value and re.fullmatch(r"\d+", str(value).strip()))
+
+    if id_type == "imdb" and valid_imdb(imdb_id):
+        return imdb_id, tmdb_id
+    if id_type == "tmdb" and valid_tmdb(tmdb_id):
+        return imdb_id, str(tmdb_id)
+    if id_type == "imdb" and valid_tmdb(tmdb_id):
+        try:
+            details = tmdb_details(tmdb_id, media_type)
+            recovered = details.get("imdbID") if details else None
+            if valid_imdb(recovered):
+                return recovered, str(tmdb_id)
+        except Exception as error:
+            app.logger.warning("Could not resolve IMDb ID for TMDB %s: %s", tmdb_id, error)
+
+    if id_type == "tmdb" and valid_imdb(imdb_id) and cfg.arm_config.get("TMDB_API_KEY"):
+        try:
+            details = tmdb_find(imdb_id)
+            if details:
+                found_id = details.get("tmdbID")
+                if found_id and valid_tmdb(found_id):
+                    return imdb_id, str(found_id)
+        except Exception as error:
+            app.logger.warning("Could not resolve TMDB ID for %s: %s", imdb_id, error)
+
+    def normalize(value):
+        return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+
+    target = normalize(title)
+    wanted_type = "series" if str(media_type or "").lower() in ("series", "tv") else (
+        "movie" if str(media_type or "").lower() == "movie" else ""
+    )
+    try:
+        response = metadata_selector("search", str(title or ""), str(year or ""))
+        items = response.get("Search", []) if isinstance(response, dict) else []
+    except Exception as error:
+        app.logger.warning("Could not search provider IDs for %r: %s", title, error)
+        items = []
+
+    exact = []
+    for item in items:
+        candidate_title = item.get("Title") or item.get("title") or item.get("name")
+        candidate_year = str(item.get("Year") or "")
+        candidate_type = str(item.get("Type") or "").lower()
+        if normalize(candidate_title) != target:
+            continue
+        if year and candidate_year and candidate_year[:4] != str(year)[:4]:
+            continue
+        if wanted_type and candidate_type != wanted_type:
+            continue
+        exact.append(item)
+
+    if exact:
+        candidate_ids = {
+            str(candidate.get("tmdbID") or candidate.get("id") or candidate.get("imdbID") or "")
+            for candidate in exact
+        }
+        # Without a year, don't attach an arbitrary ID when several editions share a title.
+        if wanted_year or len(candidate_ids) == 1:
+            candidate = exact[0]
+            imdb_id = candidate.get("imdbID") or candidate.get("imdb_id") or imdb_id
+            tmdb_id = candidate.get("tmdbID") or candidate.get("id") or tmdb_id
+
+    if id_type == "imdb" and not valid_imdb(imdb_id) and valid_tmdb(tmdb_id):
+        try:
+            details = tmdb_details(tmdb_id, media_type)
+            recovered = details.get("imdbID") if details else None
+            if valid_imdb(recovered):
+                imdb_id = recovered
+        except Exception as error:
+            app.logger.warning("Could not resolve IMDb ID for TMDB %s: %s", tmdb_id, error)
+
+    if id_type == "tmdb" and not valid_tmdb(tmdb_id) and valid_imdb(imdb_id):
+        if cfg.arm_config.get("TMDB_API_KEY"):
+            try:
+                details = tmdb_find(imdb_id)
+                if details:
+                    tmdb_id = details.get("tmdbID") or (
+                        str(details["results"][0].get("id")) if details.get("results") else None
+                    )
+            except Exception as error:
+                app.logger.warning("Could not resolve TMDB ID for %s: %s", imdb_id, error)
+    return (imdb_id if valid_imdb(imdb_id) else None,
+            str(tmdb_id) if valid_tmdb(tmdb_id) else None)
 
 
 def metadata_selector(func, query="", year="", imdb_id=""):

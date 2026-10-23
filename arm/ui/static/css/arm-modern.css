@@ -358,3 +358,16 @@ img, video, canvas, iframe { max-width: 100%; }
   .arm-setting-row .form-control { flex: 1 1 0; width: auto; }
   .arm-settings-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+
+/* Season/disc picker and dual-handle episode range */
+.arm-disc-controls { border: 1px solid var(--arm-border); border-radius: var(--arm-radius); background: var(--arm-surface); color: var(--arm-text); }
+.arm-choice-row { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .55rem; }
+.arm-episode-range-label { padding: .2rem .65rem; border-radius: 999px; background: var(--arm-surface-muted); border: 1px solid var(--arm-border); color: var(--arm-text); font-weight: 600; }
+.arm-dual-range { position: relative; height: 2.3rem; margin: .25rem .15rem 0; }
+.arm-dual-range input[type="range"] { position: absolute; inset: .6rem 0 auto; width: 100%; margin: 0; pointer-events: none; appearance: none; background: transparent; }
+.arm-dual-range input[type="range"]::-webkit-slider-runnable-track, .arm-dual-range input[type="range"]::-moz-range-track { height: .32rem; border-radius: 999px; background: var(--arm-border); }
+.arm-dual-range input[type="range"]::-webkit-slider-thumb { appearance: none; pointer-events: auto; width: 1.1rem; height: 1.1rem; margin-top: -.39rem; border-radius: 50%; border: 2px solid var(--arm-primary); background: var(--arm-surface); cursor: ew-resize; }
+.arm-dual-range input[type="range"]::-moz-range-thumb { pointer-events: auto; width: 1.1rem; height: 1.1rem; border-radius: 50%; border: 2px solid var(--arm-primary); background: var(--arm-surface); cursor: ew-resize; }
+.arm-search-poster { max-height: 16rem; object-fit: contain; }
+.arm-selected-poster { max-height: 26rem; object-fit: contain; }
