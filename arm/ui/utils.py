@@ -765,7 +765,7 @@ def build_arm_cfg(form_data, comments):
             value = value.strip()
         # The Gmail secret fields render blank in the settings form; preserve saved
         # values when the user submits an unrelated settings change.
-        if key in ("GMAIL_OAUTH_CLIENT_SECRET", "GMAIL_OAUTH_REFRESH_TOKEN", "SMTP_PASSWORD") and not value:
+        if key in ("GMAIL_OAUTH_CLIENT_SECRET", "GMAIL_OAUTH_REFRESH_TOKEN", "SMTP_PASSWORD", "FLASK_SECRET_KEY") and not value:
             value = cfg.arm_config.get(key, "")
         # Never expose OAuth tokens or secrets in debug logs.
         if re.search(r"_KEY|_API|_PASSWORD|_SECRET|_TOKEN", key, re.IGNORECASE):

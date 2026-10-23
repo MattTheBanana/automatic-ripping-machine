@@ -30,10 +30,10 @@
                         <option value="smtp" {% if v|string|lower == 'smtp' %}selected{% endif %}>SMTP / app password</option>
                         <option value="gmail_oauth" {% if v|string|lower == 'gmail_oauth' %}selected{% endif %}>Gmail API / OAuth</option>
                     </select>
-                    {% elif k in ['GMAIL_OAUTH_CLIENT_SECRET', 'GMAIL_OAUTH_REFRESH_TOKEN', 'SMTP_PASSWORD'] %}
+                    {% elif k in ['GMAIL_OAUTH_CLIENT_SECRET', 'GMAIL_OAUTH_REFRESH_TOKEN', 'SMTP_PASSWORD', 'FLASK_SECRET_KEY'] %}
                     <input type="password" class="form-control" aria-label="{{ k }}" name="{{ k }}"
                            value="" autocomplete="new-password"
-                           placeholder="{% if v %}Configured — leave blank to keep the saved value{% elif k == 'SMTP_PASSWORD' %}Enter SMTP password or app password{% else %}Enter OAuth credential{% endif %}"
+                           placeholder="{% if v %}Configured — leave blank to keep the saved value{% elif k == 'SMTP_PASSWORD' %}Enter SMTP password or app password{% elif k == 'FLASK_SECRET_KEY' %}Generated automatically if blank{% else %}Enter OAuth credential{% endif %}"
                            aria-describedby="{{ k }}"
                            {% if ripper_read_only %}
                              disabled="" title="arm.yaml is read-only"
@@ -54,21 +54,84 @@
                 </div>
             {% endfor %}
             </div>
-            <button id="settings" class="btn btn-secondary btn-lg btn-block" form="ripperSettings"
+            <button id="saveRipperSettings" class="btn btn-secondary btn-lg btn-block" form="ripperSettings"
                     type="submit">Submit
             </button>
         </form>
     </div>
     <script>
         (function () {
+            const root = document.getElementById("armSettingsGrid");
             const search = document.getElementById("armSettingsSearch");
-            const rows = document.querySelectorAll("#armSettingsGrid .arm-setting-row");
-            if (!search) return;
+            if (!root || !search) return;
+            const rows = Array.from(root.querySelectorAll(".arm-setting-row"));
+            const sections = new Map();
+
+            function sectionFor(key) {
+                if (/^(raw_path|transcode_path|completed_path|extras_sub|installpath|logpath|dbfile|abcde_config_file)$/.test(key) || /_path$/.test(key)) {
+                    return "Storage & Paths";
+                }
+                if (/^(gmail_|smtp_|email_|notify_|ifttt|po_|push|apprise|json_url|bash_script|emby|discord|slack)/.test(key)) {
+                    return "Notifications & Integrations";
+                }
+                if (/^(hb_|handbrake|ffmpeg|use_ffmpeg|skip_transcode|max_concurrent_transcodes|transcode)/.test(key)) {
+                    return "Transcoding";
+                }
+                if (/^(makemkv|ripmethod|mainfeature|minlength|maxlength|manual_wait|auto_eject|allow_duplicates|prevent_99|arm_check_udf|max_concurrent_makemkvinfo|videotype)/.test(key)) {
+                    return "Disc Handling & MakeMKV";
+                }
+                if (/^(metadata_provider|get_video_title|get_audio_title|omdb_|tmdb_|imdb|folder_id_type|musicbrainz|cdtext|rip_poster)/.test(key)) {
+                    return "Metadata & Naming";
+                }
+                if (/^(webserver|disable_login|flask_secret_key|debug|loglevel|logfile|date_format|arm_name|arm_children)/.test(key)) {
+                    return "Web & Security";
+                }
+                return "General & Advanced";
+            }
+
+            rows.forEach(function (row) {
+                const title = sectionFor(row.dataset.settingRow || "");
+                let section = sections.get(title);
+                if (!section) {
+                    section = document.createElement("section");
+                    section.className = "arm-settings-section";
+                    const toggle = document.createElement("button");
+                    toggle.type = "button";
+                    toggle.className = "arm-settings-section-toggle";
+                    toggle.setAttribute("aria-expanded", "true");
+                    toggle.textContent = title;
+                    const fields = document.createElement("div");
+                    fields.className = "arm-settings-section-grid";
+                    toggle.addEventListener("click", function () {
+                        const expanded = toggle.getAttribute("aria-expanded") === "true";
+                        toggle.setAttribute("aria-expanded", String(!expanded));
+                        fields.hidden = expanded;
+                    });
+                    section.appendChild(toggle);
+                    section.appendChild(fields);
+                    root.appendChild(section);
+                    sections.set(title, section);
+                }
+                section.querySelector('.arm-settings-section-grid').appendChild(row);
+            });
+
             search.addEventListener("input", function () {
                 const query = this.value.trim().toLowerCase();
                 rows.forEach(function (row) {
                     const text = (row.dataset.settingRow || "") + " " + (row.dataset.settingText || "");
                     row.hidden = !text.includes(query);
+                });
+                sections.forEach(function (section) {
+                    const visibleRows = Array.from(section.querySelectorAll('.arm-setting-row')).some(function (row) {
+                        return !row.hidden;
+                    });
+                    section.hidden = !visibleRows;
+                    if (query && visibleRows) {
+                        const toggle = section.querySelector('.arm-settings-section-toggle');
+                        const fields = section.querySelector('.arm-settings-section-grid');
+                        toggle.setAttribute('aria-expanded', 'true');
+                        fields.hidden = false;
+                    }
                 });
             });
         })();

@@ -115,12 +115,16 @@
                     data: formToSend.serialize()
                 }).done(function (data) {
                     if (data.success === true) {
-                        console.log(data)
                         var dt = new Date();
                         var time = `${dt.getHours()}:${dt.getMinutes()}:${dt.getSeconds()}`;
                         addToast("Saved Successfully", `Saved ${data.form} settings at ${time}`, toastCount);
-                        toastCount++;
+                    } else {
+                        addToast("Save Failed", data.message || "The server could not save these settings.", toastCount);
                     }
+                    toastCount++;
+                }).fail(function (xhr) {
+                    addToast("Save Failed", `Could not save settings (HTTP ${xhr.status}). Check the application logs.`, toastCount);
+                    toastCount++;
                 });
             }
 
@@ -128,7 +132,7 @@
                 e.preventDefault();
                 sendSettings($("#uiSettings"), "/save_ui_settings");
             });
-            $("#settings").submit(function (e) {
+            $("#ripperSettings").submit(function (e) {
                 e.preventDefault();
                 sendSettings($("#ripperSettings"), "/save_settings");
             })
