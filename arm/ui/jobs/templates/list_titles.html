@@ -4,52 +4,49 @@
 {% block nav %}{{ super() }}{% endblock %}
 
 {% block content %}
-    <div class="container">
-        <div class="container d-flex justify-content-center">
-            <div class="row w-100">
-                <form action="" method="get" class="w-100" novalidate>
-                    {{ form.hidden_tag() }}
-                    <div class="input-group mb-3">
-                        <div class="input-group-prepend">
-                            <span class="input-group-text" id="searchtitle">Title</span>
-                        </div>
-                        <input type="text" class="form-control" aria-label="searchtitle" name="title"
-                               value="{{ title }}" aria-describedby="searchtitle">
-                        <div class="invalid-tooltip">
-                            Search can't be blank
-                        </div>
-                        <div class="input-group-prepend">
-                            <span class="input-group-text" id="basic-addon1">Year</span>
-                        </div>
-                        <input type="text" class="form-control" name="year" value="{{ year }}" aria-label="year"
-                               aria-describedby="basic-addon1">
-                    </div>
-                    <input class="form-control" name="job_id" value="{{ job_id }}" hidden>
-                    <input class="form-control" name="save" value="save" hidden>
-                    <button class="btn btn-info btn-lg btn-block" type="submit">Search</button>
-                </form>
+<div class="container">
+    <form action="" method="get" novalidate>
+        {{ form.hidden_tag() }}
+        <div class="form-row">
+            <div class="form-group col-12 col-md-8">
+                <label for="searchtitle">Title</label>
+                <input id="searchtitle" type="text" class="form-control" name="title" value="{{ title }}" required>
+            </div>
+            <div class="form-group col-12 col-md-4">
+                <label for="search-year">Year</label>
+                <input id="search-year" type="number" min="1800" max="2200" class="form-control" name="year" value="{{ year }}">
             </div>
         </div>
-        <br><br>
-
-        <div class="row">
-            {% for res in results["Search"] %}
-                {% if "Type" in res and res["Type"].lower() != "game" %}
-                    <div class="col-md-3 text-center">
-                        <div class="card text-center">
-                            <div class="card-header">
-                                <a href="gettitle?imdbID={{ res["imdbID"] }}&job_id={{ job_id }}">
-                                  <img src="{{ res["Poster"] }}" width="120px" class="img-thumbnail" alt="Poster image">
-                                </a>
-                            </div>
-                            <div class="card-body"><strong>{{ res["Title"] }}</strong> - {{ res["Type"].capitalize() }}
-                                ({{ res["Year"] }})
-                            </div>
+        <input type="hidden" name="job_id" value="{{ job_id }}">
+        {% include "disc_metadata_controls.html" %}
+        <button class="btn btn-primary btn-block" type="submit">Search again</button>
+    </form>
+    <div class="row mt-4">
+        {% for res in results.get("Search", []) %}
+            {% if res.get("Type", "").lower() in ("movie", "series") %}
+                <div class="col-12 col-sm-6 col-lg-3 mb-3">
+                    <div class="card h-100 text-center">
+                        <a class="card-header" href="{{ url_for('route_jobs.gettitle',
+                            imdbID=res.get('imdbID', ''), tmdbID=res.get('tmdbID') or res.get('id', ''),
+                            type=res.get('Type', 'movie'), job_id=job_id,
+                            season_number=season_number if season_number is not none else '',
+                            disc_number=disc_number if disc_number is not none else '',
+                            episode_start=episode_start if episode_start is not none else '',
+                            episode_end=episode_end if episode_end is not none else '',
+                            metadata_controls='1') }}">
+                            {% if res.get("Poster") %}<img src="{{ res['Poster'] }}" class="img-fluid arm-search-poster" alt="Poster for {{ res.get('Title', 'media') }}">{% else %}<span class="text-muted">No poster</span>{% endif %}
+                        </a>
+                        <div class="card-body">
+                            <strong>{{ res.get("Title", "Unknown title") }}</strong>
+                            <div>{{ res.get("Type", "media")|capitalize }}{% if res.get("Year") %} ({{ res.get("Year") }}){% endif %}</div>
                         </div>
                     </div>
-                {% endif %}
-            {% endfor %}
-        </div>
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="col-12"><p class="text-muted text-center">No results found. Try spelling the title with spaces or removing the year.</p></div>
+        {% endfor %}
     </div>
-
+</div>
 {% endblock %}
+

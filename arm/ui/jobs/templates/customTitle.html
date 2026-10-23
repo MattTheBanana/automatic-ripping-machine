@@ -3,44 +3,30 @@
 
 {% block nav %}{{ super() }}{% endblock %}
 
-{% block content %}  
-	<div class="row text-center justify-content-center">
-		<div class="col">
-			<p>This is intended for DVDs or for TV Series that have more than one disk</p>
-		</div>
-	</div> 
-<div class="container justify-content-center">
+{% block content %}
+<div class="container">
     <div class="row justify-content-center">
-        <div class="col-12 col-md-8 col-lg-7">
-		<form action="" method="get" novalidate>
-			<div class="input-group mb-3 flex-nowrap">
-				<div class="input-group-prepend">
-					<span class="input-group-text" id="searchtitle">Title</span>
-				</div>
-				<input type="text" class="form-control" aria-label="searchtitle" name="title" placeholder="title..." value="{{job.title if job.title != '' else '' }}" aria-describedby="searchtitle">
-			    <div class="invalid-tooltip">
-					Title can't be blank
-				</div>
-			</div>
-			<div class="input-group mb-3 flex-nowrap">
-				<div class="input-group-prepend">
-					<span class="input-group-text" id="basic-addon1">Year</span>
-				</div>
-				<input type="text" class="form-control" name="year" aria-label="year" value="{{ job.year if job.year != '' else '' }}" aria-describedby="basic-addon1">
-			</div>
-			<input class="form-control" name="job_id" value="{{ job.job_id }}" hidden>
-			<button class="btn btn-info btn-lg btn-block" type="submit">Set Custom Title</button>
-		</form>
-		</div>
-	</div>
-			{% if form.errors %}
-				{% for k in form.errors %}
-					<script>$("[name='{{k}}']").addClass("is-invalid");</script>
-				{% endfor %}
-			{% endif %}
+        <div class="col-12 col-lg-9">
+            <h2 class="h4 text-center mb-3">Customize title</h2>
+            <p class="text-muted">Set a custom title for multi-disc TV releases or discs ARM could not identify.</p>
+            <form action="" method="get" novalidate>
+                <div class="form-row">
+                    <div class="form-group col-12 col-md-8">
+                        <label for="custom-title">Title</label>
+                        <input id="custom-title" type="text" class="form-control" name="title" value="{{ suggested_title }}" required>
+                    </div>
+                    <div class="form-group col-12 col-md-4">
+                        <label for="custom-year">Year</label>
+                        <input id="custom-year" type="number" min="1800" max="2200" class="form-control" name="year" value="{{ suggested_year }}">
+                    </div>
+                </div>
+                <input type="hidden" name="job_id" value="{{ job.job_id }}">
+                {% include "disc_metadata_controls.html" %}
+                <button class="btn btn-primary btn-lg btn-block" type="submit">Save title and episode mapping</button>
+            </form>
+        </div>
+    </div>
 </div>
-
-
-
-
 {% endblock %}
+
+
