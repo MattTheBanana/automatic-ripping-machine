@@ -19,6 +19,7 @@ from arm.models import Job
 from arm.ripper import utils
 from arm.ripper.ProcessHandler import arm_subprocess
 from arm.ui import db
+from arm.media_metadata import parse_media_label
 
 # flake8: noqa: W605
 from arm.ui import utils as ui_utils
@@ -94,8 +95,26 @@ def identify(job):
     arm_subprocess(["umount", job.devpath])
 
 
+def _apply_disc_label_metadata(job):
+    """Copy only explicitly provided title/year/season/disc/episode values from the label."""
+    parsed = parse_media_label(getattr(job, "label", None))
+    for field in ("season_number", "disc_number", "episode_start", "episode_end"):
+        if parsed.get(field) is not None and getattr(job, field, None) is None:
+            setattr(job, field, parsed[field])
+    raw_label = str(getattr(job, "label", "") or "")
+    current_title = str(getattr(job, "title", "") or "")
+    if parsed.get("title") and (
+            not current_title or current_title == raw_label
+            or current_title.strip().lower() in ("none", "not identified")):
+        job.title = job.title_auto = parsed["title"]
+    if parsed.get("year") and not getattr(job, "year", None):
+        job.year = job.year_auto = parsed["year"]
+    return parsed
+
+
 def identify_bluray(job):
-    """ Get's Blu-Ray title by parsing XML in bdmt_eng.xml """
+    """Get Blu-ray title and metadata from XML or the disc label."""
+    parsed_label = _apply_disc_label_metadata(job)
 
     try:
         with open(job.mountpoint + '/BDMV/META/DL/bdmt_eng.xml', "rb") as xml_file:
@@ -146,10 +165,10 @@ def identify_bluray(job):
             db.session.commit()
             return False
         else:
-            bluray_title = str(job.label).replace('_', ' ')
+            bluray_title = parsed_label.get('title') or str(job.label).replace('_', ' ')
             # Preserve the disc label's original casing (e.g. iRobot, eXistenZ).
             job.title = job.title_auto = utils.clean_for_filename(bluray_title)
-            job.year = ""
+            job.year = parsed_label.get('year') or ""
             db.session.commit()
             return True
 
@@ -169,7 +188,7 @@ def identify_bluray(job):
             )
 
     bluray_modified_timestamp = os.path.getmtime(job.mountpoint + '/BDMV/META/DL/bdmt_eng.xml')
-    bluray_year = (datetime.datetime.fromtimestamp(bluray_modified_timestamp).strftime('%Y'))
+    bluray_year = parsed_label.get('year') or datetime.datetime.fromtimestamp(bluray_modified_timestamp).strftime('%Y')
 
     bluray_title = unicodedata.normalize('NFKD', str(bluray_title)).encode('ascii', 'ignore').decode()
 
@@ -189,9 +208,8 @@ def identify_bluray(job):
 
 
 def identify_dvd(job):
-    """ Manipulates the DVD title and calls OMDB to try and
-    lookup the title """
-
+    """Identify DVDs using disc label parsing and metadata providers."""
+    parsed_label = _apply_disc_label_metadata(job)
     logging.debug(f"\n\r{job.pretty_table()}")
     # Some older DVDs aren't actually labelled
     if not job.label or job.label == "":
@@ -231,9 +249,9 @@ def identify_dvd(job):
     logging.debug(f"dvd_title_label: {dvd_title}")
     # in this block we want to strip out any chars that might be bad
     # strip all non-numeric chars and use that for year
-    year = re.sub(r"\D", "", str(job.year)) if job.year else None
-    # next line is not really needed, but we don't want to leave an x somewhere
-    dvd_title = job.label.replace("16x9", "")
+    year = parsed_label.get('year') or (re.sub(r"\D", "", str(job.year)) if job.year else None)
+    # Remove explicit year and disc tokens before making a metadata query.
+    dvd_title = (parsed_label.get('title') or job.label).replace("16x9", "")
     logging.debug(f"dvd_title ^a-z _-: {dvd_title}")
     # rip out any SKU's at the end of the line
     dvd_title = re.sub(r"SKU\b", "", dvd_title)

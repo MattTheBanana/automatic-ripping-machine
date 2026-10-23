@@ -3,6 +3,8 @@ import urllib
 import json
 import re
 import requests
+
+from arm.media_metadata import title_search_variants
 from flask.logging import default_handler  # noqa: F401
 
 from arm.ui import app
@@ -12,46 +14,31 @@ TMDB_YEAR_REGEX = r"-\d{0,2}-\d{0,2}"
 
 
 def call_omdb_api(title=None, year=None, imdb_id=None, plot="short"):
-    """
-    Queries OMDbapi.org for title information and parses if it's a movie
-        or a tv series
-    :param title: Title of job
-    :param year: year if supplied
-    :param imdb_id: imdb if supplied
-    :param plot: if plot should be short/full. Defaults "short"
-    :return: dict of
-    """
-    omdb_api_key = cfg.arm_config['OMDB_API_KEY']
-    title_info = None
-    # Default url
-    str_url = f"https://www.omdbapi.com/?s={title}&plot={plot}&r=json&apikey={omdb_api_key}"
-    # Build url for omdb
+    """Search OMDb for a movie/show while retrying normalized title variants."""
+    omdb_api_key = cfg.arm_config["OMDB_API_KEY"]
     if imdb_id:
-        str_url = f"https://www.omdbapi.com/?i={imdb_id}&plot={plot}&r=json&apikey={omdb_api_key}"
+        urls = [f"https://www.omdbapi.com/?i={urllib.parse.quote(str(imdb_id))}&plot={plot}&r=json&apikey={omdb_api_key}"]
     elif title:
-        # try:
-        title = urllib.parse.quote(title)
-        if year and year is not None:
-            year = urllib.parse.quote(year)
-            str_url = f"https://www.omdbapi.com/?s={title}&y={year}&plot={plot}&r=json&apikey={omdb_api_key}"
-        else:
-            str_url = f"https://www.omdbapi.com/?s={title}&plot={plot}&r=json&apikey={omdb_api_key}"
+        urls = []
+        for variant in title_search_variants(title):
+            encoded = urllib.parse.quote(variant)
+            if year:
+                urls.append(f"https://www.omdbapi.com/?s={encoded}&y={urllib.parse.quote(str(year))}&plot={plot}&r=json&apikey={omdb_api_key}")
+            urls.append(f"https://www.omdbapi.com/?s={encoded}&plot={plot}&r=json&apikey={omdb_api_key}")
     else:
         app.logger.debug("no params")
-    # connect to omdb and add background key
-    try:
-        title_info_json = urllib.request.urlopen(str_url).read()
-        title_info = json.loads(title_info_json.decode())
-        title_info['background_url'] = None
-        app.logger.debug(f"omdb - {title_info}")
-        if 'Error' in title_info or title_info['Response'] == "False":
-            title_info = None
-    except urllib.error.HTTPError as error:
-        app.logger.error(f"omdb call failed with error - {error}")
-    else:
-        app.logger.debug("omdb - call was successful")
-    return title_info
-
+        return None
+    for url in urls:
+        try:
+            payload = urllib.request.urlopen(url).read()
+            info = json.loads(payload.decode())
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
+            app.logger.error("OMDb call failed: %s", error)
+            continue
+        info["background_url"] = None
+        if info.get("Response") != "False" and "Error" not in info:
+            return info
+    return None
 
 def get_omdb_poster(title=None, year=None, imdb_id=None, plot="short"):
     """
@@ -127,80 +114,71 @@ def get_tmdb_poster(search_query=None, year=None):
 
 
 def tmdb_process_poster(search_results, poster_base):
-    """
-    Process the results from tmdb and fix results with poster\n
-    :param search_results: results from tmdb search
-    :param poster_base: poster_base from search
-    :return: Single media entry with poster or None if none found
-    """
-    for media in search_results['results']:
-        if media['poster_path'] is not None and 'release_date' in media:
-            released_date = re.sub(TMDB_YEAR_REGEX, "", media['release_date'])
-            app.logger.debug(f"{media['title']} ({released_date})- {poster_base}{media['poster_path']}")
-            media['poster_url'] = f"{poster_base}{media['poster_path']}"
-            media["Plot"] = media['overview']
-            media['background_url'] = f"{poster_base}{media['backdrop_path']}"
-            media['Type'] = "movie"
-            app.logger.debug(media['background_url'])
-            return media
+    """Return one movie or series detail object when a date is available."""
+    for item in search_results.get("results", []):
+        is_series = "first_air_date" in item or "name" in item
+        date_value = item.get("first_air_date") if is_series else item.get("release_date")
+        if not date_value:
+            continue
+        item["poster_url"] = f"{poster_base}{item['poster_path']}" if item.get("poster_path") else ""
+        item["Plot"] = item.get("overview") or ""
+        item["background_url"] = f"{poster_base}{item['backdrop_path']}" if item.get("backdrop_path") else None
+        item["Type"] = "series" if is_series else "movie"
+        item["Year"] = re.sub(TMDB_YEAR_REGEX, "", date_value)
+        item["Title"] = item.get("name") if is_series else item.get("title")
+        item["tmdbID"] = str(item.get("id") or "")
+        return item
     return None
-
 
 def tmdb_search(search_query=None, year=None):
-    """
-    Queries api.themoviedb.org for movies close to the query
-    :param search_query: title of movie or tv show
-    :param year: year of release
-    :return: json/dict of search results
-    """
-    tmdb_api_key = cfg.arm_config['TMDB_API_KEY']
-    search_results, poster_base, response = tmdb_fetch_results(search_query, year, tmdb_api_key)
-    app.logger.debug(f"Search results - movie - {search_results}")
-    if 'status_code' in search_results:
-        app.logger.error(f"tmdb_fetch_results failed with error -  {search_results['status_message']}")
-        return None
-    return_results = {}
-    if search_results['total_results'] > 0:
-        app.logger.debug(f"tmdb_search - found {search_results['total_results']} movies")
-        return tmdb_process_results(poster_base, return_results, search_results, "movie")
-    # Search for tv series
-    app.logger.debug("tmdb_search - movie not found, trying tv series ")
-    url = f"https://api.themoviedb.org/3/search/tv?api_key={tmdb_api_key}&query={search_query}"
-    response = requests.get(url)
-    search_results = json.loads(response.text)
-    if search_results['total_results'] > 0:
-        app.logger.debug(search_results['total_results'])
-        return tmdb_process_results(poster_base, return_results, search_results, "series")
-
-    # We got to here with no results give nothing back
-    app.logger.debug("tmdb_search - no results found")
+    """Search movies and TV series, retrying joined-word/compact label variants."""
+    key = cfg.arm_config["TMDB_API_KEY"]
+    poster_base = "https://image.tmdb.org/t/p/original"
+    for query in title_search_variants(search_query):
+        movie_data, _, _ = tmdb_fetch_results(query, year, key)
+        movie_results = (movie_data.get("results") or [])[:5] if "status_code" not in movie_data else []
+        tv_params = {"api_key": key, "query": query}
+        if year:
+            tv_params["first_air_date_year"] = year
+        try:
+            tv_response = requests.get("https://api.themoviedb.org/3/search/tv", params=tv_params)
+            tv_data = json.loads(tv_response.text)
+            tv_results = (tv_data.get("results") or [])[:5] if "status_code" not in tv_data else []
+        except (requests.RequestException, ValueError, TypeError) as error:
+            app.logger.warning("TMDB TV search failed: %s", error)
+            tv_results = []
+        if movie_results or tv_results:
+            movies, series = {}, {}
+            if movie_results:
+                tmdb_process_results(poster_base, movies, {"results": movie_results}, "movie")
+            if tv_results:
+                tmdb_process_results(poster_base, series, {"results": tv_results}, "series")
+            combined = (movies.get("Search") or []) + (series.get("Search") or [])
+            unique, seen = [], set()
+            for item in combined:
+                identity = (str(item.get("Type", "")).lower(), str(item.get("tmdbID") or item.get("id") or ""))
+                if identity not in seen:
+                    seen.add(identity)
+                    unique.append(item)
+            return {"Search": unique}
     return None
 
-
 def tmdb_process_results(poster_base, return_results, search_results, media_type="movie"):
-    """
-    Process search result so that it follows omdb style of output
-    :param poster_base: Base path to the poster
-    :param return_results: dict of results to be returned in omdb format
-    :param search_results: results from tmdb
-    :param media_type: movie or series
-    :return: dict/json that will be returned to arm
-    """
-    for result in search_results['results']:
-        app.logger.debug(result)
-        result['poster_path'] = result['poster_path'] if result['poster_path'] is not None else None
-        result['release_date'] = '0000-00-00' if 'release_date' not in result else result['release_date']
-        result['imdbID'] = tmdb_get_imdb(result['id'])
-        result['Year'] = re.sub(TMDB_YEAR_REGEX, "", result['first_air_date']) if 'first_air_date' in result else \
-            re.sub(TMDB_YEAR_REGEX, "", result['release_date'])
-        result['Title'] = result['title'] if 'title' in result else result['name']  # This isn't great
-        result['Type'] = media_type
-        result['Poster'] = f"{poster_base}{result['poster_path']}"
-        result['background_url'] = f"{poster_base}{result['backdrop_path']}"
-        result["Plot"] = result['overview']
-    return_results['Search'] = search_results['results']
+    """Convert TMDB movie/TV results to the common OMDb-like result shape."""
+    processed = []
+    for result in search_results.get("results", []):
+        date_value = result.get("first_air_date") if media_type == "series" else result.get("release_date")
+        result["Year"] = re.sub(TMDB_YEAR_REGEX, "", date_value) if date_value else ""
+        result["imdbID"] = tmdb_get_imdb(result.get("id"))
+        result["tmdbID"] = str(result.get("id") or "")
+        result["Title"] = result.get("title") or result.get("name") or ""
+        result["Type"] = media_type
+        result["Poster"] = f"{poster_base}{result['poster_path']}" if result.get("poster_path") else ""
+        result["background_url"] = f"{poster_base}{result['backdrop_path']}" if result.get("backdrop_path") else None
+        result["Plot"] = result.get("overview") or ""
+        processed.append(result)
+    return_results["Search"] = processed
     return return_results
-
 
 def tmdb_get_imdb(tmdb_id):
     """
@@ -229,46 +207,60 @@ def tmdb_get_imdb(tmdb_id):
     return search_results['external_ids']['imdb_id']
 
 
-def tmdb_find(imdb_id):
-    """
-    basic function to return an object from TMDB from only the IMDB id
-    :param str imdb_id: the IMDB id to lookup
-    :return: dict in the standard 'arm' format
-    """
-    tmdb_api_key = cfg.arm_config['TMDB_API_KEY']
-    url = f"https://api.themoviedb.org/3/find/{imdb_id}?api_key={tmdb_api_key}&external_source=imdb_id"
-    poster_size = "original"
-    poster_base = f"https://image.tmdb.org/t/p/{poster_size}"
-    # Making a get request
-    response = requests.get(url)
-    search_results = json.loads(response.text)
-    # app.logger.debug(f"tmdb_find = {search_results}")
-    if len(search_results['movie_results']) > 0:
-        # We want to push out everything even if we don't use it right now, it may be used later.
-        return_results = {'results': search_results['movie_results']}
-        return_results['poster_url'] = f"{poster_base}{return_results['results'][0]['poster_path']}"
-        return_results["Plot"] = return_results['results'][0]['overview']
-        return_results['background_url'] = f"{poster_base}{return_results['results'][0]['backdrop_path']}"
-        return_results['Type'] = "movie"
-        return_results['imdbID'] = imdb_id
-        return_results['Poster'] = return_results['poster_url']
-        return_results['Year'] = re.sub(TMDB_YEAR_REGEX, "", return_results['results'][0]['release_date'])
-        return_results['Title'] = return_results['results'][0]['title']
-    else:
-        # We want to push out everything even if we don't use it right now, it may be used later.
-        return_results = {'results': search_results['tv_results']}
-        return_results['poster_url'] = f"{poster_base}{return_results['results'][0]['poster_path']}"
-        return_results["Plot"] = return_results['results'][0]['overview']
-        return_results['background_url'] = f"{poster_base}{return_results['results'][0]['backdrop_path']}"
-        return_results['imdbID'] = imdb_id
-        return_results['Type'] = "series"
-        return_results['Poster'] = return_results['poster_url']
-        return_results['Year'] = re.sub(TMDB_YEAR_REGEX, "", return_results['results'][0]['first_air_date'])
-        return_results['Title'] = return_results['results'][0]['name']
-    if return_results.get('results'):
-        return_results['tmdbID'] = str(return_results['results'][0].get('id') or '')
-    return return_results
+def tmdb_details(tmdb_id, media_type="movie"):
+    """Fetch the exact movie/show selected by TMDB ID."""
+    if not tmdb_id:
+        return None
+    kind = "tv" if str(media_type).lower() in ("series", "tv") else "movie"
+    try:
+        response = requests.get(
+            f"https://api.themoviedb.org/3/{kind}/{urllib.parse.quote(str(tmdb_id))}",
+            params={"api_key": cfg.arm_config["TMDB_API_KEY"], "append_to_response": "external_ids"}
+        )
+        item = json.loads(response.text)
+    except (requests.RequestException, ValueError, TypeError):
+        return None
+    if "status_code" in item:
+        return None
+    is_series = kind == "tv"
+    date_value = item.get("first_air_date") if is_series else item.get("release_date")
+    poster_base = "https://image.tmdb.org/t/p/original"
+    poster = f"{poster_base}{item['poster_path']}" if item.get("poster_path") else ""
+    background = f"{poster_base}{item['backdrop_path']}" if item.get("backdrop_path") else None
+    external = item.get("external_ids") or {}
+    return {"results": [item], "Title": (item.get("name") if is_series else item.get("title")) or "",
+            "Year": re.sub(TMDB_YEAR_REGEX, "", date_value) if date_value else "",
+            "Type": "series" if is_series else "movie", "imdbID": external.get("imdb_id"),
+            "tmdbID": str(item.get("id") or tmdb_id), "Poster": poster, "poster_url": poster,
+            "background_url": background, "Plot": item.get("overview") or ""}
 
+
+def tmdb_find(imdb_id):
+    """Find a movie or TV series in TMDB by IMDb ID."""
+    key = cfg.arm_config["TMDB_API_KEY"]
+    response = requests.get(
+        f"https://api.themoviedb.org/3/find/{urllib.parse.quote(str(imdb_id))}",
+        params={"api_key": key, "external_source": "imdb_id"}
+    )
+    try:
+        found = json.loads(response.text)
+    except (ValueError, TypeError):
+        return None
+    if found.get("movie_results"):
+        item, media_type = found["movie_results"][0], "movie"
+        title, date_value = item.get("title") or "", item.get("release_date")
+    elif found.get("tv_results"):
+        item, media_type = found["tv_results"][0], "series"
+        title, date_value = item.get("name") or "", item.get("first_air_date")
+    else:
+        return None
+    poster_base = "https://image.tmdb.org/t/p/original"
+    poster = f"{poster_base}{item['poster_path']}" if item.get("poster_path") else ""
+    background = f"{poster_base}{item['backdrop_path']}" if item.get("backdrop_path") else None
+    return {"results": [item], "poster_url": poster, "Plot": item.get("overview") or "",
+            "background_url": background, "Type": media_type, "imdbID": imdb_id,
+            "Poster": poster, "Year": re.sub(TMDB_YEAR_REGEX, "", date_value) if date_value else "",
+            "Title": title, "tmdbID": str(item.get("id") or "")}
 
 def validate_imdb(imdb_id):
     """
