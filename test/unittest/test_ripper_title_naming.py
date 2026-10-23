@@ -74,6 +74,12 @@ class TestMediaFolderNaming(unittest.TestCase):
         self.assertEqual(label["episode_start"], 1)
         self.assertEqual(label["episode_end"], 3)
 
+        episode_only = parse_media_label("SHERLOCK_E01-E03")
+        self.assertEqual(episode_only["title"], "Sherlock")
+        self.assertIsNone(episode_only["season_number"])
+        self.assertEqual(episode_only["episode_start"], 1)
+        self.assertEqual(episode_only["episode_end"], 3)
+
     def test_series_output_includes_episode_range_and_one_provider_id(self):
         job = self.make_job("Sherlock [imdbid-tt1475582]", year="2010",
                             folder_id_type="imdb", imdb_id="tt1475582")

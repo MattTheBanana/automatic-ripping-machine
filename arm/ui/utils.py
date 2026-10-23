@@ -546,9 +546,15 @@ def resolve_media_ids(title, year=None, imdb_id=None, tmdb_id=None, media_type=N
         exact.append(item)
 
     if exact:
-        candidate = exact[0]
-        imdb_id = candidate.get("imdbID") or candidate.get("imdb_id") or imdb_id
-        tmdb_id = candidate.get("tmdbID") or candidate.get("id") or tmdb_id
+        candidate_ids = {
+            str(candidate.get("tmdbID") or candidate.get("id") or candidate.get("imdbID") or "")
+            for candidate in exact
+        }
+        # Without a year, don't attach an arbitrary ID when several editions share a title.
+        if wanted_year or len(candidate_ids) == 1:
+            candidate = exact[0]
+            imdb_id = candidate.get("imdbID") or candidate.get("imdb_id") or imdb_id
+            tmdb_id = candidate.get("tmdbID") or candidate.get("id") or tmdb_id
 
     if id_type == "imdb" and not valid_imdb(imdb_id) and valid_tmdb(tmdb_id):
         try:
