@@ -500,6 +500,14 @@ def resolve_media_ids(title, year=None, imdb_id=None, tmdb_id=None, media_type=N
         return imdb_id, tmdb_id
     if id_type == "tmdb" and valid_tmdb(tmdb_id):
         return imdb_id, str(tmdb_id)
+    if id_type == "imdb" and valid_tmdb(tmdb_id):
+        try:
+            details = tmdb_details(tmdb_id, media_type)
+            recovered = details.get("imdbID") if details else None
+            if valid_imdb(recovered):
+                return recovered, str(tmdb_id)
+        except Exception as error:
+            app.logger.warning("Could not resolve IMDb ID for TMDB %s: %s", tmdb_id, error)
 
     if id_type == "tmdb" and valid_imdb(imdb_id) and cfg.arm_config.get("TMDB_API_KEY"):
         try:
@@ -542,6 +550,15 @@ def resolve_media_ids(title, year=None, imdb_id=None, tmdb_id=None, media_type=N
         candidate = exact[0]
         imdb_id = candidate.get("imdbID") or candidate.get("imdb_id") or imdb_id
         tmdb_id = candidate.get("tmdbID") or candidate.get("id") or tmdb_id
+
+    if id_type == "imdb" and not valid_imdb(imdb_id) and valid_tmdb(tmdb_id):
+        try:
+            details = tmdb_details(tmdb_id, media_type)
+            recovered = details.get("imdbID") if details else None
+            if valid_imdb(recovered):
+                imdb_id = recovered
+        except Exception as error:
+            app.logger.warning("Could not resolve IMDb ID for TMDB %s: %s", tmdb_id, error)
 
     if id_type == "tmdb" and not valid_tmdb(tmdb_id) and valid_imdb(imdb_id):
         if cfg.arm_config.get("TMDB_API_KEY"):

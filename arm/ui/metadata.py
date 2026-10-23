@@ -131,9 +131,10 @@ def tmdb_process_poster(search_results, poster_base):
     return None
 
 def tmdb_search(search_query=None, year=None):
-    """Search movies and TV series, retrying joined-word/compact label variants."""
+    """Search TMDB movies and TV, combining joined-word title variants."""
     key = cfg.arm_config["TMDB_API_KEY"]
     poster_base = "https://image.tmdb.org/t/p/original"
+    combined, seen = [], set()
     for query in title_search_variants(search_query):
         movie_data, _, _ = tmdb_fetch_results(query, year, key)
         movie_results = (movie_data.get("results") or [])[:5] if "status_code" not in movie_data else []
@@ -147,29 +148,26 @@ def tmdb_search(search_query=None, year=None):
         except (requests.RequestException, ValueError, TypeError) as error:
             app.logger.warning("TMDB TV search failed: %s", error)
             tv_results = []
-        if movie_results or tv_results:
-            movies, series = {}, {}
-            if movie_results:
-                tmdb_process_results(poster_base, movies, {"results": movie_results}, "movie")
-            if tv_results:
-                tmdb_process_results(poster_base, series, {"results": tv_results}, "series")
-            combined = (movies.get("Search") or []) + (series.get("Search") or [])
-            unique, seen = [], set()
-            for item in combined:
+        for media_type, items in (("movie", movie_results), ("series", tv_results)):
+            if not items:
+                continue
+            processed = {}
+            tmdb_process_results(poster_base, processed, {"results": items}, media_type)
+            for item in processed.get("Search") or []:
                 identity = (str(item.get("Type", "")).lower(), str(item.get("tmdbID") or item.get("id") or ""))
                 if identity not in seen:
                     seen.add(identity)
-                    unique.append(item)
-            return {"Search": unique}
-    return None
+                    combined.append(item)
+    return {"Search": combined} if combined else None
 
 def tmdb_process_results(poster_base, return_results, search_results, media_type="movie"):
-    """Convert TMDB movie/TV results to the common OMDb-like result shape."""
+    """Convert TMDB movie/TV search items into the common result shape."""
     processed = []
     for result in search_results.get("results", []):
         date_value = result.get("first_air_date") if media_type == "series" else result.get("release_date")
         result["Year"] = re.sub(TMDB_YEAR_REGEX, "", date_value) if date_value else ""
-        result["imdbID"] = tmdb_get_imdb(result.get("id"))
+        # Result search pages use TMDB IDs directly, avoiding one detail request per card.
+        result["imdbID"] = result.get("imdb_id") or ""
         result["tmdbID"] = str(result.get("id") or "")
         result["Title"] = result.get("title") or result.get("name") or ""
         result["Type"] = media_type

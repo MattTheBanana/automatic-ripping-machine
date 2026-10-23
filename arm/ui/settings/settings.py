@@ -206,8 +206,7 @@ def save_settings():
                 for active_job in active_jobs:
                     if active_job.config is not None:
                         active_job.config.FOLDER_ID_TYPE = id_type
-                    if (id_type == "tmdb" and not active_job.tmdb_id
-                            and active_job.imdb_id and cfg.arm_config.get("TMDB_API_KEY")):
+                    if id_type == "tmdb" and not active_job.tmdb_id and active_job.imdb_id and cfg.arm_config.get("TMDB_API_KEY"):
                         try:
                             details = ui_utils.tmdb_find(active_job.imdb_id)
                             if details:
@@ -216,6 +215,14 @@ def save_settings():
                                 )
                         except Exception as error:
                             app.logger.warning("Could not resolve TMDB ID for job %s: %s",
+                                               active_job.job_id, error)
+                    elif id_type == "imdb" and not active_job.imdb_id and active_job.tmdb_id and cfg.arm_config.get("TMDB_API_KEY"):
+                        try:
+                            details = ui_utils.tmdb_details(active_job.tmdb_id, active_job.video_type)
+                            if details and details.get("imdbID"):
+                                active_job.imdb_id = active_job.imdb_id_auto = details["imdbID"]
+                        except Exception as error:
+                            app.logger.warning("Could not resolve IMDb ID for job %s: %s",
                                                active_job.job_id, error)
                 db.session.commit()
             except Exception as error:
