@@ -17,13 +17,19 @@ def call_omdb_api(title=None, year=None, imdb_id=None, plot="short"):
     """Search OMDb for a movie/show while retrying normalized title variants."""
     omdb_api_key = cfg.arm_config["OMDB_API_KEY"]
     if imdb_id:
-        urls = [f"https://www.omdbapi.com/?i={urllib.parse.quote(str(imdb_id))}&plot={plot}&r=json&apikey={omdb_api_key}"]
+        urls = [
+            f"https://www.omdbapi.com/?i={urllib.parse.quote(str(imdb_id))}"
+            f"&plot={plot}&r=json&apikey={omdb_api_key}"
+        ]
     elif title:
         urls = []
         for variant in title_search_variants(title):
             encoded = urllib.parse.quote(variant)
             if year:
-                urls.append(f"https://www.omdbapi.com/?s={encoded}&y={urllib.parse.quote(str(year))}&plot={plot}&r=json&apikey={omdb_api_key}")
+                urls.append(
+                    f"https://www.omdbapi.com/?s={encoded}&y={urllib.parse.quote(str(year))}"
+                    f"&plot={plot}&r=json&apikey={omdb_api_key}"
+                )
             urls.append(f"https://www.omdbapi.com/?s={encoded}&plot={plot}&r=json&apikey={omdb_api_key}")
     else:
         app.logger.debug("no params")

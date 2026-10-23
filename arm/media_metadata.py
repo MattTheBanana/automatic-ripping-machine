@@ -159,7 +159,9 @@ def parse_media_label(label):
         r"\b(?:season|series)\s*#?\s*0*\d{1,2}\b",
         r"\b(?:disc|disk)\s*#?\s*0*\d{1,2}\b",
         r"\bD\s*0*\d{1,2}\b",
-        r"\b(?:episodes?|eps?|ep)\s*0*\d{1,3}(?:\s*(?:-|–|—|to|through|&|and)\s*(?:(?:episodes?|eps?|ep|e)\s*)?0*\d{1,3})?\b",
+        r"\b(?:episodes?|eps?|ep)\s*0*\d{1,3}"
+        r"(?:\s*(?:-|–|—|to|through|&|and)\s*"
+        r"(?:(?:episodes?|eps?|ep|e)\s*)?0*\d{1,3})?\b",
     )
     for pattern in patterns:
         working = re.sub(pattern, " ", working, flags=re.IGNORECASE)

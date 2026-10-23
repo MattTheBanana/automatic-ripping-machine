@@ -29,7 +29,6 @@ from arm.models.ui_settings import UISettings
 from arm.models.user import User
 from arm.ui import app, db
 from arm.ui.metadata import tmdb_search, get_tmdb_poster, tmdb_find, tmdb_details, call_omdb_api
-from arm.media_metadata import parse_media_label, detect_disc_metadata, safe_positive_int
 from arm.ui.settings import DriveUtils
 
 # Path definitions
