@@ -22,7 +22,7 @@ class TestSmtpNotifications(unittest.TestCase):
         self.smtp = MagicMock()
         self.smtp.__enter__ = Mock(return_value=self.smtp)
         self.smtp.__exit__ = Mock(return_value=False)
-        self.factory = Mock(return_value=self.smtp)
+        self.factory = MagicMock(return_value=self.smtp)
 
     @patch("arm.smtp_notifications.ssl.create_default_context")
     def test_sends_email_using_starttls_and_app_password(self, ssl_context):
