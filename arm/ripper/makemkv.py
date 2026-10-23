@@ -669,7 +669,10 @@ def makemkv_mkv(job, rawpath):
     get_track_info(job.drive.mdisc, job)
     # route to ripping functions.
     if job.config.MAINFEATURE:
-        logging.info("Trying to find mainfeature (sorting by length desc, filesize desc, chapters desc, track_number asc)")
+        logging.info(
+            "Trying to find mainfeature "
+            "(sorting by length desc, filesize desc, chapters desc, track_number asc)"
+        )
         track = Track.query.filter_by(job_id=job.job_id).order_by(
             Track.length.desc(), Track.filesize.desc(), Track.chapters.desc(), Track.track_number.asc()).first()
         rip_mainfeature(job, track, rawpath)
