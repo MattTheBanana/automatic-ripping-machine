@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Identification of dvd/bluray"""
 
+from __future__ import annotations
+
 import os
 import logging
 import urllib
