@@ -39,7 +39,7 @@ class RipperException(Exception):
     pass
 
 
-def notify(job, title: str, body: str):
+def notify(job, title: str, body: str):  # noqa: C901
     """
     Send notifications with apprise\n
     :param job: Current Job
@@ -183,7 +183,7 @@ def convert_job_type(video_type):
     return type_sub_folder
 
 
-def fix_job_title(job):
+def fix_job_title(job):  # noqa: C901
     """Build media filenames using the current ID policy and explicit episode metadata."""
     # Another process (the settings UI) may have resolved IDs while this rip kept running.
     try:
@@ -262,6 +262,8 @@ def fix_job_title(job):
     return job_title
 
 #  ############## Start of post processing functions
+
+
 def move_files(base_path, filename, job, is_main_feature=False):
     """
     Run extra checks then move files from RAW_PATH or TRANSCODE_PATH to final media directory\n

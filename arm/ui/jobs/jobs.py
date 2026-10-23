@@ -21,7 +21,6 @@ import arm.ui.utils as ui_utils
 from arm.ui import app, db, constants
 from arm.models.job import Job, JobState
 from arm.models.notifications import Notifications
-import arm.config.config as cfg
 from arm.ui.forms import TitleSearchForm, ChangeParamsForm, TrackFormDynamic
 from arm.media_metadata import parse_media_label, detect_disc_metadata, safe_positive_int
 
@@ -185,6 +184,7 @@ def title_search():
                            suggested_title=suggested_title, suggested_year=suggested_year,
                            **metadata_values)
 
+
 @route_jobs.route('/customTitle')
 @login_required
 def customtitle():
@@ -227,6 +227,7 @@ def customtitle():
                            suggested_title=suggested_title, suggested_year=suggested_year,
                            **metadata_values)
 
+
 @route_jobs.route('/gettitle')
 @route_jobs.route('/select_title')
 @login_required
@@ -253,6 +254,7 @@ def gettitle():
         return redirect(url_for("route_jobs.title_search", job_id=job_id))
     return render_template("showtitle.html", results=details, job_id=job_id,
                            **_disc_metadata_values(job, request.args))
+
 
 @route_jobs.route('/updatetitle')
 @login_required
@@ -288,6 +290,7 @@ def updatetitle():
     db.session.commit()
     flash(f"Title: {old_title} ({old_year}) was updated to {new_title} ({new_year})", "success")
     return redirect("/")
+
 
 @route_jobs.route('/activerips')
 @login_required

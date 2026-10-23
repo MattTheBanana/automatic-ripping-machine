@@ -40,7 +40,7 @@ def _as_bool(value, default=False):
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def send_smtp_notification(title, body, config=None, smtp_factory=None, smtp_ssl_factory=None):
+def send_smtp_notification(title, body, config=None, smtp_factory=None, smtp_ssl_factory=None):  # noqa: C901
     """Send email through SMTP when EMAIL_NOTIFICATION_METHOD is smtp.
 
     STARTTLS is enabled by default. SMTP_USE_SSL selects implicit TLS instead;

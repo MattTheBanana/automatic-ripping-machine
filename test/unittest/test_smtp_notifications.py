@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, patch
 
 from arm.smtp_notifications import send_smtp_notification
 
@@ -19,7 +19,7 @@ CONFIG = {
 
 class TestSmtpNotifications(unittest.TestCase):
     def setUp(self):
-        self.smtp = Mock()
+        self.smtp = MagicMock()
         self.smtp.__enter__ = Mock(return_value=self.smtp)
         self.smtp.__exit__ = Mock(return_value=False)
         self.factory = Mock(return_value=self.smtp)

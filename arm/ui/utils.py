@@ -483,7 +483,7 @@ def job_dupe_check(crc_id):
     return False, None
 
 
-def resolve_media_ids(title, year=None, imdb_id=None, tmdb_id=None, media_type=None):
+def resolve_media_ids(title, year=None, imdb_id=None, tmdb_id=None, media_type=None):  # noqa: C901
     """Resolve provider IDs from exact title/year/type matches; never attach a fuzzy ID."""
     id_type = str(cfg.arm_config.get("FOLDER_ID_TYPE", "none")).strip().lower()
     if id_type not in ("imdb", "tmdb"):
@@ -551,7 +551,7 @@ def resolve_media_ids(title, year=None, imdb_id=None, tmdb_id=None, media_type=N
             for candidate in exact
         }
         # Without a year, don't attach an arbitrary ID when several editions share a title.
-        if wanted_year or len(candidate_ids) == 1:
+        if year or len(candidate_ids) == 1:
             candidate = exact[0]
             imdb_id = candidate.get("imdbID") or candidate.get("imdb_id") or imdb_id
             tmdb_id = candidate.get("tmdbID") or candidate.get("id") or tmdb_id

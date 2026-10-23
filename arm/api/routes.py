@@ -12,6 +12,7 @@ from arm.ui import app, constants
 
 route_api = Blueprint("route_api", __name__)
 
+
 @route_api.route('/json', methods=['GET'])
 def feed_json():
     """
