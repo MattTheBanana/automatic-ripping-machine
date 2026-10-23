@@ -14,37 +14,61 @@ TMDB_YEAR_REGEX = r"-\d{0,2}-\d{0,2}"
 
 
 def call_omdb_api(title=None, year=None, imdb_id=None, plot="short"):
-    """Search OMDb for a movie/show while retrying normalized title variants."""
+    """Search OMDb for a movie/show, merging results from joined-word variants."""
     omdb_api_key = cfg.arm_config["OMDB_API_KEY"]
     if imdb_id:
-        urls = [
+        url = (
             f"https://www.omdbapi.com/?i={urllib.parse.quote(str(imdb_id))}"
             f"&plot={plot}&r=json&apikey={omdb_api_key}"
-        ]
-    elif title:
-        urls = []
-        for variant in title_search_variants(title):
-            encoded = urllib.parse.quote(variant)
-            if year:
-                urls.append(
-                    f"https://www.omdbapi.com/?s={encoded}&y={urllib.parse.quote(str(year))}"
-                    f"&plot={plot}&r=json&apikey={omdb_api_key}"
-                )
-            urls.append(f"https://www.omdbapi.com/?s={encoded}&plot={plot}&r=json&apikey={omdb_api_key}")
-    else:
+        )
+        try:
+            payload = urllib.request.urlopen(url).read()
+            info = json.loads(payload.decode())
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
+            app.logger.error("OMDb details lookup failed: %s", error)
+            return None
+        info["background_url"] = None
+        return info if info.get("Response") != "False" and "Error" not in info else None
+
+    if not title:
         app.logger.debug("no params")
         return None
+
+    urls = []
+    for variant in title_search_variants(title):
+        encoded = urllib.parse.quote(variant)
+        if year:
+            urls.append(
+                f"https://www.omdbapi.com/?s={encoded}&y={urllib.parse.quote(str(year))}"
+                f"&plot={plot}&r=json&apikey={omdb_api_key}"
+            )
+        urls.append(f"https://www.omdbapi.com/?s={encoded}&plot={plot}&r=json&apikey={omdb_api_key}")
+
+    merged, seen = [], set()
     for url in urls:
         try:
             payload = urllib.request.urlopen(url).read()
             info = json.loads(payload.decode())
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
-            app.logger.error("OMDb call failed: %s", error)
+            app.logger.error("OMDb search failed: %s", error)
             continue
-        info["background_url"] = None
-        if info.get("Response") != "False" and "Error" not in info:
-            return info
-    return None
+        if info.get("Response") == "False" or "Error" in info:
+            continue
+        for item in info.get("Search") or []:
+            identity = str(item.get("imdbID") or "").lower()
+            if not identity:
+                identity = "|".join((
+                    re.sub(r"[^a-z0-9]", "", str(item.get("Title") or "").casefold()),
+                    str(item.get("Year") or ""),
+                    str(item.get("Type") or "").lower(),
+                ))
+            if identity not in seen:
+                seen.add(identity)
+                merged.append(item)
+    if not merged:
+        return None
+    return {"Search": merged, "Response": "True", "totalResults": str(len(merged)),
+            "background_url": None}
 
 def get_omdb_poster(title=None, year=None, imdb_id=None, plot="short"):
     """

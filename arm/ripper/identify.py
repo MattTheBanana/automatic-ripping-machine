@@ -320,20 +320,27 @@ def get_video_details(job):
 
 
 def update_job(job, search_results):
-    """
-    Update a job using a successful metadata result and preserve available provider IDs.
-    """
+    """Update a job from the best metadata result, preferring TV for explicit episodes."""
     if not search_results or "Search" not in search_results or not search_results["Search"]:
         return None
 
-    result = search_results["Search"][0]
+    candidates = search_results["Search"]
+    # An explicit season/episode marker is strong evidence for a TV title. Do not
+    # let a same-name movie sort ahead of it just because movie search ran first.
+    if getattr(job, "season_number", None) or getattr(job, "episode_start", None):
+        series_candidates = [
+            candidate for candidate in candidates
+            if str(candidate.get("Type", "")).lower() in ("series", "tv")
+        ]
+        if series_candidates:
+            candidates = series_candidates
+
+    result = candidates[0]
     new_year = result.get("Year", "")
     title = utils.clean_for_filename(result.get("Title", ""))
     imdb_id = result.get("imdbID")
     tmdb_id = result.get("id") or result.get("tmdbID")
 
-    # OMDb results include IMDb IDs but not TMDB IDs. Resolve TMDB only when it
-    # is the configured output identifier; default setups incur no extra request.
     if (not tmdb_id
             and str(cfg.arm_config.get("FOLDER_ID_TYPE", "none")).lower() == "tmdb"
             and imdb_id
@@ -363,7 +370,6 @@ def update_job(job, search_results):
         "hasnicetitle": True,
     }
     return utils.database_updater(args, job)
-
 
 def metadata_selector(job, title=None, year=None):
     """
