@@ -78,6 +78,13 @@ TrueNAS images use `ghcr.io/mattthebanana/arm-custom`, based on `ghcr.io/mattthe
 
 After a code change is merged to `main`, the `Build and publish custom ARM` workflow should publish the custom image. A new image digest/tag is what lets TrueNAS see a refreshed image; merely changing UI code on an unmerged branch does not update the published `latest` image.
 
+### TrueNAS custom-app revision and image identity
+
+- This deployment is a TrueNAS **Custom App** built from Docker Compose YAML (the exported config includes TrueNAS-specific `x-portals` metadata). The TrueNAS catalog `Revision` field is catalog packaging metadata; it is not configurable in a Compose YAML and adding `revision:` to this service will not increment it. Do not confuse that with ARM's `Current git version` shown in General Info.
+- ARM's current Git hash display is implemented in `arm/ui/utils.py:get_git_revision_hash()`; it calls `git rev-parse HEAD` in `INSTALLPATH` and truncates to seven characters. This reports the source checkout embedded in the image, not a TrueNAS deployment revision.
+- `.github/workflows/publish-custom-arm.yml` runs on pushes to `main` and currently publishes the same build to `latest`, the `VERSION` value (currently `2.24.4`), and the mutable legacy tag `makemkv-2.0.0`. Thus the legacy tag name does not identify a unique build. The successful build for main commit `44ee1ccc02ebe7c9b750dd0e69772e87019cdbe9` published after PR #6 was merged; older running images can still show `e5672a1` if TrueNAS has not recreated the workload with the new image digest.
+- Recommended follow-up: add an immutable tag such as `git-<short-sha>` (and optionally a workflow run/build number) to the custom publish workflow and document the matching image reference. On TrueNAS, select that exact image tag in the YAML and update/redeploy the Custom App. A mutable tag such as `latest` may keep the same text while its digest changes; don't use the TrueNAS catalog revision as the indicator for this custom image.
+
 ## Multiple-agent working agreements
 
 - Use short-lived `feature/<topic>` or `fix/<topic>` branches and open PRs against this fork's `main`.
@@ -94,3 +101,12 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 - Disc identification checks `BDMV` before `VIDEO_TS` so hybrid discs remain identified as Blu-ray. Main-feature selection prioritizes runtime, then file size and chapter count, to avoid choosing a heavily chaptered short extra over the film.
 - Job-card HTML is generated in `arm/ui/static/js/common.js`; keep every opened wrapper closed exactly once. Posters and status indicators use dedicated classes with explicit size limits to avoid oversized artwork.
 - Ripper settings are grouped into collapsible sections with live filtering. If adding a new setting, update `setup/arm.yaml` and `arm/ui/comments.json`; the section assignment in `settings/ripper.html` may also need updating.
+
+## Current handover state (2026-10-23)
+
+- PR #5, **Audit UI and fix recurring ARM bugs**, is merged to `main`. It includes the Ripper Settings save handler fix, responsive job-card/poster/status sizing, searchable/collapsible settings, a persistent random Flask session key (or `ARM_FLASK_SECRET_KEY` override), hybrid Blu-ray detection precedence, runtime-first MakeMKV main-feature selection, and a 30-second SQLite connection timeout.
+- PR #6, **Improve ripper settings field labels and layout**, is merged to `main`. All 99 current `setup/arm.yaml` keys have human-readable labels above each field, with the actual config key right-aligned in muted gray; boxed left-side labels were removed.
+- PR #7, **Fix Python 3.9 UI startup compatibility**, is open on branch `fix/python39-type-annotations`. It adds `from __future__ import annotations` after the module docstring in `arm/ripper/identify.py` to prevent Python 3.9 from evaluating `str | None` at import time. At handover, CI was still running; check PR checks before merging.
+- A main-branch quality run at commit `44ee1ccc02ebe7c9b750dd0e69772e87019cdbe9` failed in the Python 3.9 UI smoke test for that annotation issue; the missing optical-drive warning in CI is separate and expected on a runner without drives. Python 3.12 passed that run. Re-check current Actions state rather than assuming these statuses remain current.
+- The custom image workflow (`Build and publish custom ARM`) succeeded for `44ee1ccc`. If TrueNAS still reports `e5672a1`, verify the workload image digest and explicitly pull/redeploy the Custom App. The YAML's `image:` tag is a Docker image selector, not a TrueNAS catalog revision setting.
+- Next useful improvement is to make build identity unambiguous by publishing an immutable per-commit image tag (for example, `git-<short-sha>`) alongside `latest` and the legacy tag. Before changing the publish workflow, verify how the current TrueNAS app pulls images and whether the mutable tag's digest has refreshed.
