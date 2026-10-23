@@ -28,6 +28,7 @@ from arm.models.track import Track
 from arm.models.user import User
 from arm.models.system_drives import SystemDrives
 from arm.ripper import apprise_bulk
+from arm.gmail_notifications import send_gmail_notification
 from arm.media_metadata import detect_disc_metadata, safe_positive_int
 
 NOTIFY_TITLE = "ARM notification"
@@ -60,6 +61,13 @@ def notify(job, title: str, body: str):
     database_adder(notification)
 
     bash_notify(cfg.arm_config, title, body)
+
+    # Gmail OAuth is an independent notifier; misconfiguration must not affect
+    # ripping or stop any other configured notification provider.
+    try:
+        send_gmail_notification(title, body, cfg.arm_config)
+    except Exception as error:
+        logging.warning("Gmail OAuth notification could not be sent: %s", error)
 
     # Sent to remote sites
     # Create an Apprise instance

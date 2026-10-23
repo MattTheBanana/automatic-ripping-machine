@@ -96,6 +96,21 @@ Disc labels can also provide title metadata and optional TV mapping. For example
 
 The title search and manual-title pages include editable season/disc controls and a two-ended episode-range slider. The mapping is saved with the job and only adds episode labels when that information is present or explicitly selected.
 
+
+### Gmail OAuth notifications
+
+ARM can send notifications through the Gmail API using OAuth 2.0 without an app password. Leave all Gmail fields blank to keep this feature disabled. In **Settings → Ripper Settings**, configure:
+
+- **GMAIL_OAUTH_CLIENT_ID** and **GMAIL_OAUTH_CLIENT_SECRET** from your Google Cloud OAuth client.
+- **GMAIL_OAUTH_REFRESH_TOKEN** generated after granting the client the scope https://www.googleapis.com/auth/gmail.send with offline access.
+- **GMAIL_SENDER_EMAIL**, the Gmail address that authorized the client.
+- **GMAIL_RECIPIENTS**, one or more comma-separated email addresses.
+
+In Google Cloud, create or select a project, enable the [Gmail API](https://developers.google.com/workspace/gmail/api/quickstart), and create an OAuth client. Obtain an offline refresh token for the Gmail send scope using Google's OAuth authorization flow; send operations use the [Gmail API messages.send endpoint](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/send). ARM exchanges the refresh token for a short-lived access token when a notification is sent. The client secret and refresh token are hidden in the settings form, and leaving those fields blank preserves the saved values.
+
+**Token lifetime note:** Google's documentation says refresh tokens for an external OAuth consent screen left in **Testing** expire after seven days when using Gmail scopes. For a persistent setup, configure the consent screen and publishing status appropriately for your use case, and plan for revocation or token expiration. See Google's [OAuth refresh-token guidance](https://developers.google.com/identity/protocols/oauth2#expiration).
+
+
 ## Troubleshooting
  [Please see the wiki for troubleshooting](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/).
 

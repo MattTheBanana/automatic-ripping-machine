@@ -347,6 +347,18 @@ PO_APP_KEY: ""
 BASH_SCRIPT: ""
 
 
+# Gmail API notifications (OAuth 2.0)
+# Leave all Gmail fields blank to disable Gmail notifications.
+# Enable the Gmail API in Google Cloud and authorize the client with the
+# https://www.googleapis.com/auth/gmail.send scope and offline access.
+GMAIL_OAUTH_CLIENT_ID: ""
+GMAIL_OAUTH_CLIENT_SECRET: ""
+GMAIL_OAUTH_REFRESH_TOKEN: ""
+# Must be the Gmail address for the account that authorized the OAuth client.
+GMAIL_SENDER_EMAIL: ""
+# One or more comma-separated recipient email addresses.
+GMAIL_RECIPIENTS: ""
+
 # OMDB_API_KEY
 # omdbapi.com API Key
 # See README-OMDBAPI for background and info

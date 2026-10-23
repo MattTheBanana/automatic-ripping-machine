@@ -760,11 +760,15 @@ def build_arm_cfg(form_data, comments):
         # Skip the Cross Site Request Forgery (CSRF) token
         if key == "csrf_token":
             continue
-        # Strip whitespace from values to prevent issues with keys/values
+        # Strip whitespace from values to prevent issues with keys/values.
         if isinstance(value, str):
             value = value.strip()
-        # Check if value contains "KEY" or "API" (any case)
-        if re.search(r"_KEY|_API|_PASSWORD", key):
+        # The Gmail secret fields render blank in the settings form; preserve saved
+        # values when the user submits an unrelated settings change.
+        if key in ("GMAIL_OAUTH_CLIENT_SECRET", "GMAIL_OAUTH_REFRESH_TOKEN") and not value:
+            value = cfg.arm_config.get(key, "")
+        # Never expose OAuth tokens or secrets in debug logs.
+        if re.search(r"_KEY|_API|_PASSWORD|_SECRET|_TOKEN", key, re.IGNORECASE):
             key_value = "####--redacted--####"
         else:
             key_value = value
