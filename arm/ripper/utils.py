@@ -28,6 +28,7 @@ from arm.models.track import Track
 from arm.models.user import User
 from arm.models.system_drives import SystemDrives
 from arm.ripper import apprise_bulk
+from arm.media_metadata import detect_disc_metadata, safe_positive_int
 
 NOTIFY_TITLE = "ARM notification"
 
@@ -168,46 +169,77 @@ def convert_job_type(video_type):
 
 
 def fix_job_title(job):
-    """
-    Return a Jellyfin-friendly media title including the year and optional provider ID.
-
-    FOLDER_ID_TYPE is stored in each job's config so a rip keeps the naming policy
-    it was created with. Supported values are none, tmdb, and imdb.
-    """
+    """Build media filenames using the current ID policy and explicit episode metadata."""
     raw_title = getattr(job, "title_manual", None) or getattr(job, "title", None)
     if not raw_title or str(raw_title).strip().lower() in ("none", "not identified"):
         raw_title = getattr(job, "label", None)
     if not raw_title or str(raw_title).strip().lower() in ("none", "not identified"):
         raw_title = "Unknown Title"
-    job_title = clean_for_filename(str(raw_title))
 
+    raw_title = str(raw_title)
+    tag = re.search(r"\[(tmdbid-\d+|imdbid-tt\d+)\]", raw_title, re.IGNORECASE)
+    previous_id = tag.group(1) if tag else None
+    raw_title = re.sub(r"\s*\[(?:tmdbid-\d+|imdbid-tt\d+)\]", "", raw_title, flags=re.IGNORECASE)
+    job_title = clean_for_filename(raw_title)
     year = getattr(job, "year", None)
     if year and str(year) not in ("0000", "None"):
         job_title = f"{job_title} ({year})"
 
     job_config = getattr(job, "config", None)
-    id_type = getattr(job_config, "FOLDER_ID_TYPE", None)
-    if not id_type:
-        id_type = cfg.arm_config.get("FOLDER_ID_TYPE", "none")
-    id_type = str(id_type).strip().lower()
-
+    if job_config is not None:
+        try:
+            db.session.refresh(job_config, attribute_names=["FOLDER_ID_TYPE"])
+        except Exception:
+            pass
+    id_type = str((getattr(job_config, "FOLDER_ID_TYPE", None) if job_config is not None else None)
+                  or cfg.arm_config.get("FOLDER_ID_TYPE", "none")).strip().lower()
     if id_type == "tmdb":
         media_id = getattr(job, "tmdb_id", None)
-        valid_id = media_id is not None and re.fullmatch(r"\d+", str(media_id).strip())
-        provider_tag = "tmdbid"
+        if not media_id and previous_id and previous_id.lower().startswith("tmdbid-"):
+            media_id = previous_id.split("-", 1)[1]
+        valid_id, provider_tag = bool(media_id and re.fullmatch(r"\d+", str(media_id).strip())), "tmdbid"
     elif id_type == "imdb":
         media_id = getattr(job, "imdb_id", None)
-        valid_id = media_id is not None and re.fullmatch(r"tt\d+", str(media_id).strip(), re.IGNORECASE)
+        if not media_id and previous_id and previous_id.lower().startswith("imdbid-"):
+            media_id = previous_id.split("-", 1)[1]
+        valid_id = bool(media_id and re.fullmatch(r"tt\d+", str(media_id).strip(), re.IGNORECASE))
         provider_tag = "imdbid"
     else:
-        media_id = None
-        valid_id = False
-        provider_tag = ""
+        media_id, valid_id, provider_tag = None, False, ""
 
+    detected = detect_disc_metadata(
+        getattr(job, "label", None), getattr(job, "title", None), getattr(job, "title_auto", None)
+    )
+    season = safe_positive_int(getattr(job, "season_number", None), 99) or detected["season_number"]
+    disc = safe_positive_int(getattr(job, "disc_number", None), 99) or detected["disc_number"]
+    episode_start = safe_positive_int(getattr(job, "episode_start", None)) or detected["episode_start"]
+    episode_end = safe_positive_int(getattr(job, "episode_end", None)) or detected["episode_end"]
+    if episode_start and not episode_end:
+        episode_end = episode_start
+    if episode_end and not episode_start:
+        episode_start = episode_end
+    if episode_start and episode_end and episode_end < episode_start:
+        episode_start, episode_end = episode_end, episode_start
+
+    is_series = str(getattr(job, "video_type", "") or "").lower() == "series" or bool(season or episode_start)
+    if is_series:
+        if episode_start:
+            episode_tag = f"E{episode_start:02d}"
+            if episode_end and episode_end != episode_start:
+                episode_tag += f"-E{episode_end:02d}"
+            if season:
+                episode_tag = f"S{season:02d}{episode_tag}"
+            job_title = f"{job_title} - {episode_tag}"
+        elif season or disc:
+            parts = []
+            if season:
+                parts.append(f"Season {season:02d}")
+            if disc:
+                parts.append(f"Disc {disc:02d}")
+            job_title = f"{job_title} - {' '.join(parts)}"
     if valid_id:
         job_title = f"{job_title} [{provider_tag}-{str(media_id).strip()}]"
     return job_title
-
 
 #  ############## Start of post processing functions
 def move_files(base_path, filename, job, is_main_feature=False):
