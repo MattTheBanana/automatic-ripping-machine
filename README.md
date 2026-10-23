@@ -92,6 +92,10 @@ The selected identifier is added to both the output folder and the main movie fi
 
 ARM also normalizes disc-label underscores and illegal filename characters without converting every space into a hyphen, and it no longer shortens legitimate hyphenated titles during metadata fallback. See the [Jellyfin metadata identifier guide](https://jellyfin.org/docs/general/server/metadata/identifiers/).
 
+Disc labels can also provide title metadata and optional TV mapping. For example, `21_JUMP_STREET_2012` is interpreted as **21 Jump Street (2012)**, while `Myheroacademia_d1` is interpreted as **My Hero Academia, Disc 1** without inventing a year, season, or episode range. Explicit patterns such as `S01E01-E03_DISC02` can fill the season, episode range, and disc number. Search retries joined-word variants such as `sherlockholmes`, and TMDB searches include both movies and TV series.
+
+The title search and manual-title pages include editable season/disc controls and a two-ended episode-range slider. The mapping is saved with the job and only adds episode labels when that information is present or explicitly selected.
+
 ## Troubleshooting
  [Please see the wiki for troubleshooting](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/).
 
