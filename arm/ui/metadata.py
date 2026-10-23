@@ -70,6 +70,7 @@ def call_omdb_api(title=None, year=None, imdb_id=None, plot="short"):
     return {"Search": merged, "Response": "True", "totalResults": str(len(merged)),
             "background_url": None}
 
+
 def get_omdb_poster(title=None, year=None, imdb_id=None, plot="short"):
     """
     Queries OMDbapi.org for the poster for movie/show
@@ -160,6 +161,7 @@ def tmdb_process_poster(search_results, poster_base):
         return item
     return None
 
+
 def tmdb_search(search_query=None, year=None):
     """Search TMDB movies and TV, combining joined-word title variants."""
     key = cfg.arm_config["TMDB_API_KEY"]
@@ -190,6 +192,7 @@ def tmdb_search(search_query=None, year=None):
                     combined.append(item)
     return {"Search": combined} if combined else None
 
+
 def tmdb_process_results(poster_base, return_results, search_results, media_type="movie"):
     """Convert TMDB movie/TV search items into the common result shape."""
     processed = []
@@ -207,6 +210,7 @@ def tmdb_process_results(poster_base, return_results, search_results, media_type
         processed.append(result)
     return_results["Search"] = processed
     return return_results
+
 
 def tmdb_get_imdb(tmdb_id):
     """
@@ -289,6 +293,7 @@ def tmdb_find(imdb_id):
             "background_url": background, "Type": media_type, "imdbID": imdb_id,
             "Poster": poster, "Year": re.sub(TMDB_YEAR_REGEX, "", date_value) if date_value else "",
             "Title": title, "tmdbID": str(item.get("id") or "")}
+
 
 def validate_imdb(imdb_id):
     """

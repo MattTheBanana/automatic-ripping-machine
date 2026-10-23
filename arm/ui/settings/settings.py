@@ -177,7 +177,7 @@ def check_hw_transcode_support():
 
 @route_settings.route('/save_settings', methods=['POST'])
 @login_required
-def save_settings():
+def save_settings():  # noqa: C901
     """
     Page - save_settings
     Method - POST

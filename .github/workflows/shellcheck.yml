@@ -10,8 +10,11 @@ concurrency:
 # documentation.
 
 on:
+    # Feature branches are checked by pull_request; push checks are main-only.
     push:
+        branches: [main]
     pull_request:
+        branches: [main]
     workflow_dispatch:
 
 jobs:

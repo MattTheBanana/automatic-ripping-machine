@@ -29,6 +29,7 @@ from arm.models.user import User
 from arm.models.system_drives import SystemDrives
 from arm.ripper import apprise_bulk
 from arm.gmail_notifications import send_gmail_notification
+from arm.smtp_notifications import send_smtp_notification
 from arm.media_metadata import detect_disc_metadata, safe_positive_int
 
 NOTIFY_TITLE = "ARM notification"
@@ -38,7 +39,7 @@ class RipperException(Exception):
     pass
 
 
-def notify(job, title: str, body: str):
+def notify(job, title: str, body: str):  # noqa: C901
     """
     Send notifications with apprise\n
     :param job: Current Job
@@ -62,12 +63,18 @@ def notify(job, title: str, body: str):
 
     bash_notify(cfg.arm_config, title, body)
 
-    # Gmail OAuth is an independent notifier; misconfiguration must not affect
-    # ripping or stop any other configured notification provider.
+    # Email transport is configurable and independent from the other providers.
+    # Select exactly one transport so one event never sends duplicate emails.
+    email_method = str(cfg.arm_config.get("EMAIL_NOTIFICATION_METHOD", "gmail_oauth")).strip().lower()
     try:
-        send_gmail_notification(title, body, cfg.arm_config)
+        if email_method == "smtp":
+            send_smtp_notification(title, body, cfg.arm_config)
+        elif email_method == "gmail_oauth":
+            send_gmail_notification(title, body, cfg.arm_config)
+        elif email_method not in ("", "none"):
+            logging.warning("Unknown email notification method: %s", email_method)
     except Exception as error:
-        logging.warning("Gmail OAuth notification could not be sent: %s", error)
+        logging.warning("Email notification could not be sent: %s", type(error).__name__)
 
     # Sent to remote sites
     # Create an Apprise instance
@@ -176,7 +183,7 @@ def convert_job_type(video_type):
     return type_sub_folder
 
 
-def fix_job_title(job):
+def fix_job_title(job):  # noqa: C901
     """Build media filenames using the current ID policy and explicit episode metadata."""
     # Another process (the settings UI) may have resolved IDs while this rip kept running.
     try:
@@ -255,6 +262,8 @@ def fix_job_title(job):
     return job_title
 
 #  ############## Start of post processing functions
+
+
 def move_files(base_path, filename, job, is_main_feature=False):
     """
     Run extra checks then move files from RAW_PATH or TRANSCODE_PATH to final media directory\n
