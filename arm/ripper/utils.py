@@ -170,6 +170,11 @@ def convert_job_type(video_type):
 
 def fix_job_title(job):
     """Build media filenames using the current ID policy and explicit episode metadata."""
+    # Another process (the settings UI) may have resolved IDs while this rip kept running.
+    try:
+        db.session.refresh(job, attribute_names=["tmdb_id", "imdb_id"])
+    except Exception:
+        pass
     raw_title = getattr(job, "title_manual", None) or getattr(job, "title", None)
     if not raw_title or str(raw_title).strip().lower() in ("none", "not identified"):
         raw_title = getattr(job, "label", None)
