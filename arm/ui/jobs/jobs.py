@@ -13,6 +13,7 @@ Covers
 - json [JSON GET]
 """
 
+import re
 from flask_login import LoginManager, login_required, current_user  # noqa: F401
 from flask import render_template, request, Blueprint, flash, redirect, url_for
 from werkzeug.routing import ValidationError

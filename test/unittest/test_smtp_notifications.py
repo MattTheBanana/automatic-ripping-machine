@@ -20,8 +20,8 @@ CONFIG = {
 class TestSmtpNotifications(unittest.TestCase):
     def setUp(self):
         self.smtp = MagicMock()
-        self.smtp.__enter__ = Mock(return_value=self.smtp)
-        self.smtp.__exit__ = Mock(return_value=False)
+        self.smtp.__enter__.return_value = self.smtp
+        self.smtp.__exit__.return_value = False
         self.factory = MagicMock(return_value=self.smtp)
 
     @patch("arm.smtp_notifications.ssl.create_default_context")
