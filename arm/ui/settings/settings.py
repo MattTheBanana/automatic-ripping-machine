@@ -26,7 +26,7 @@ import sqlalchemy
 from flask_login import login_required, \
     current_user, login_user, UserMixin, logout_user  # noqa: F401
 from flask import render_template, request, flash, \
-    redirect, Blueprint, session, url_for
+    redirect, Blueprint, session, url_for, jsonify
 
 import arm.ui.utils as ui_utils
 from arm.ripper.ProcessHandler import arm_subprocess
@@ -616,3 +616,51 @@ def update_sysinfo():
     db.session.commit()
 
     return redirect(url_for(REDIRECT_SETTINGS))
+
+
+@route_settings.route('/resource_metrics')
+@login_required
+def resource_metrics():
+    """Return refreshed process-environment metrics for the right-side resource drawer."""
+    import psutil
+
+    def read_limit(paths):
+        for path in paths:
+            try:
+                with open(path, "r", encoding="ascii") as handle:
+                    value = handle.read().strip()
+                if value and value != "max":
+                    number = int(value)
+                    if number > 0:
+                        return number
+            except (OSError, ValueError):
+                continue
+        return None
+
+    memory = psutil.virtual_memory()
+    # Prefer cgroup limits when present; psutil alone may report host memory in containers.
+    limit = read_limit(("/sys/fs/cgroup/memory.max",
+                        "/sys/fs/cgroup/memory/memory.limit_in_bytes"))
+    usage = read_limit(("/sys/fs/cgroup/memory.current",
+                        "/sys/fs/cgroup/memory/memory.usage_in_bytes"))
+    if limit is not None and limit < (1 << 60):
+        total_bytes = limit
+        used_bytes = usage if usage is not None else max(0, total_bytes - memory.available)
+        available_bytes = max(0, total_bytes - used_bytes)
+        memory_percent = round(min(100, used_bytes * 100 / total_bytes), 1)
+        scope = "container memory limit detected"
+    else:
+        total_bytes = memory.total
+        used_bytes = memory.used
+        available_bytes = memory.available
+        memory_percent = round(memory.percent, 1)
+        scope = "runtime memory view; container limit not detected"
+
+    return jsonify({
+        "cpu_percent": round(psutil.cpu_percent(interval=0.1), 1),
+        "memory_used_gb": round(used_bytes / (1024 ** 3), 2),
+        "memory_available_gb": round(available_bytes / (1024 ** 3), 2),
+        "memory_percent": memory_percent,
+        "memory_total_gb": round(total_bytes / (1024 ** 3), 2),
+        "scope": scope,
+    })
