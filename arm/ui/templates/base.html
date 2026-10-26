@@ -224,7 +224,10 @@
                 }
                 function bar(id, value) {
                     const node = document.getElementById(id);
-                    if (node) node.style.width = Math.max(0, Math.min(100, Number(value) || 0)) + '%';
+                    if (node) {
+                        node.style.width = Math.max(0, Math.min(100, Number(value) || 0)) + '%';
+                        node.classList.toggle('is-warning', Number(value) > 80);
+                    }
                 }
                 async function refreshResources() {
                     try {
