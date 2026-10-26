@@ -7,11 +7,11 @@ Covers
 """
 
 from flask_login import login_required  # noqa: F401
-from flask import render_template, Blueprint, redirect, flash, session
+from flask import render_template, Blueprint, redirect, flash, session, jsonify
 from datetime import datetime
 
 import arm.ui.utils as ui_utils
-from arm.ui import app
+from arm.ui import app, db
 from arm.models.notifications import Notifications
 
 route_notifications = Blueprint('route_notifications', __name__,
@@ -25,13 +25,17 @@ def arm_nav_notify():
     inject the unread notification count to all pages for the navbar count
     """
     try:
-        notify_count = Notifications.query.filter_by(cleared='0').count()
-        app.logger.debug(notify_count)
-
+        unread = Notifications.query.filter_by(cleared=False)
+        notify_count = unread.count()
+        notifications_for_drawer = unread.order_by(Notifications.id.desc()).limit(50).all()
+        app.logger.debug("Unread notifications: %s", notify_count)
     except Exception:
-        notify_count = None
+        notify_count = 0
+        notifications_for_drawer = []
+        app.logger.debug("Unable to load notifications for drawer", exc_info=True)
 
-    return dict(notify_count=notify_count)
+    return dict(notify_count=notify_count,
+                notifications_for_drawer=notifications_for_drawer)
 
 
 @route_notifications.route('/notificationview')
@@ -80,3 +84,21 @@ def arm_notification_close():
         flash('No notifications to clear', 'error')
 
     return redirect("/notificationview")
+
+
+@route_notifications.route('/notificationclear', methods=['POST'])
+@login_required
+def arm_notification_clear():
+    """Clear unread notifications from the global notification drawer."""
+    try:
+        notifications = Notifications.query.filter_by(cleared=False).all()
+        cleared_at = datetime.now()
+        for notification in notifications:
+            notification.cleared = True
+            notification.cleared_time = cleared_at
+        db.session.commit()
+        return jsonify({"success": True, "cleared_count": len(notifications)})
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Unable to clear notifications from drawer")
+        return jsonify({"success": False, "message": "Unable to clear notifications"}), 500

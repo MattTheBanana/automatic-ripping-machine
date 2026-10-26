@@ -522,17 +522,21 @@ img, video, canvas, iframe { max-width: 100%; }
   border-radius: 12px 0 0 12px;
   background: var(--arm-surface); color: var(--arm-text);
   box-shadow: var(--arm-shadow); cursor: pointer;
-  writing-mode: vertical-rl; transform: rotate(180deg);
+  writing-mode: vertical-rl; transform: none;
   font-weight: 700; letter-spacing: .02em;
 }
 .arm-notification-tab { top: 34%; }
 .arm-resource-tab { top: 58%; }
 .arm-notification-tab-edge, .arm-resource-tab-edge { font-size: 1.3rem; line-height: 1; }
 .arm-notification-count {
-  writing-mode: horizontal-tb; transform: rotate(180deg);
+  writing-mode: horizontal-tb; transform: none;
   border-radius: 999px; padding: .08rem .35rem;
   background: #dc3545; color: white; font-size: .75rem;
 }
+.arm-notification-count[hidden] { display: none; }
+.arm-notification-tab-edge, .arm-resource-tab-edge { font-size: 1.3rem; line-height: 1; }
+.arm-notification-tab { top: 34%; }
+.arm-resource-tab { top: 58%; }
 .arm-notification-backdrop {
   position: fixed; inset: 0; z-index: 1045; background: rgba(8, 15, 28, .42);
 }

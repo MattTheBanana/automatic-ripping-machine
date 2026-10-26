@@ -5,11 +5,17 @@
     <body class="arm-body">
         <!-- HTML Navigation -->
         {% include 'nav.html' %}
+        <button type="button" id="armNotificationToggle" class="arm-notification-tab"
+                aria-controls="armNotificationDrawer" aria-expanded="false" aria-label="Open notifications">
+            <span aria-hidden="true">▤</span><span>Notifications</span>
+            <span id="armNotificationCount" class="arm-notification-count"{% if not notify_count %} hidden{% endif %}>{{ notify_count or 0 }}</span>
+            <span class="arm-notification-tab-edge" aria-hidden="true">‹</span>
+        </button>
         <button type="button" id="armResourceToggle" class="arm-resource-tab"
                 aria-controls="armResourceDrawer" aria-expanded="false" aria-label="Open resource monitor">
-            <span aria-hidden="true">▤</span><span>Resources</span><span class="arm-resource-tab-edge" aria-hidden="true">›</span>
+            <span aria-hidden="true">▤</span><span>Resources</span><span class="arm-resource-tab-edge" aria-hidden="true">‹</span>
         </button>
-        <div id="armResourceBackdrop" class="arm-notification-backdrop" hidden></div>
+        <div id="armDrawerBackdrop" class="arm-notification-backdrop" hidden></div>
         <aside id="armResourceDrawer" class="arm-resource-drawer" aria-hidden="true" aria-labelledby="armResourceHeading">
             <div class="arm-notification-drawer-header">
                 <div><h2 id="armResourceHeading">Resource monitor</h2><p>Live readings from ARM's runtime</p></div>
@@ -25,32 +31,110 @@
             <p class="arm-resource-note">Container limits and host-wide memory reporting vary by TrueNAS configuration. These readings do not imply that memory is reserved for ARM or account for all ZFS ARC behavior.</p>
             <p><a href="{{ url_for('route_settings.settings') }}#system">Open system information</a></p>
         </aside>
+        <aside id="armNotificationDrawer" class="arm-notification-drawer" aria-hidden="true"
+               aria-labelledby="armNotificationHeading" role="dialog" aria-modal="true">
+            <div class="arm-notification-drawer-header">
+                <div>
+                    <h2 id="armNotificationHeading">Notifications</h2>
+                    <p>Unread ARM notifications</p>
+                </div>
+                <button type="button" id="armNotificationClose" class="btn btn-outline-secondary" aria-label="Close notifications">Close</button>
+            </div>
+            <input type="hidden" id="armNotificationCsrf" value="{{ csrf_token() }}">
+            <div class="arm-notification-drawer-actions">
+                <span id="armNotificationUnreadLabel">{{ notify_count or 0 }} unread</span>
+                <button type="button" id="armNotificationClear" class="btn btn-outline-secondary"{% if not notify_count %} disabled{% endif %}>Clear all</button>
+            </div>
+            <p id="armNotificationStatus" class="arm-resource-status" role="status" aria-live="polite"></p>
+            <div id="armNotificationItems">
+                {% if notifications_for_drawer %}
+                    {% for notification in notifications_for_drawer %}
+                        <article class="arm-notification-item">
+                            <h3>{{ notification.title or 'ARM notification' }}</h3>
+                            {% if notification.trigger_time %}
+                                <time datetime="{{ notification.trigger_time.isoformat() }}">{{ notification.trigger_time.strftime('%d %b %Y, %H:%M') }}</time>
+                            {% endif %}
+                            {% if notification.message %}<p>{{ notification.message }}</p>{% endif %}
+                        </article>
+                    {% endfor %}
+                {% else %}
+                    <p id="armNotificationEmpty">No new notifications.</p>
+                {% endif %}
+            </div>
+            <p class="arm-resource-note">Showing up to 50 most recent unread notifications.</p>
+            <p><a href="{{ url_for('route_notifications.arm_notification') }}">Open full notification page</a></p>
+        </aside>
         <script>
             (function () {
-                const drawer = document.getElementById('armResourceDrawer');
-                const toggle = document.getElementById('armResourceToggle');
-                const close = document.getElementById('armResourceClose');
-                const backdrop = document.getElementById('armResourceBackdrop');
-                if (!drawer || !toggle || !close || !backdrop) return;
-                function setOpen(open) {
-                    drawer.classList.toggle('is-open', open);
-                    backdrop.hidden = !open;
-                    drawer.setAttribute('aria-hidden', String(!open));
-                    toggle.setAttribute('aria-expanded', String(open));
-                    if (open) close.focus(); else toggle.focus();
-                    if (open) refreshResources();
+                const backdrop = document.getElementById('armDrawerBackdrop');
+                const notificationDrawer = document.getElementById('armNotificationDrawer');
+                const notificationToggle = document.getElementById('armNotificationToggle');
+                const notificationClose = document.getElementById('armNotificationClose');
+                const notificationClear = document.getElementById('armNotificationClear');
+                const resourceDrawer = document.getElementById('armResourceDrawer');
+                const resourceToggle = document.getElementById('armResourceToggle');
+                const resourceClose = document.getElementById('armResourceClose');
+                if (!backdrop || !notificationDrawer || !notificationToggle || !notificationClose ||
+                    !resourceDrawer || !resourceToggle || !resourceClose) return;
+
+                let activeDrawer = null;
+                function openDrawer(name) {
+                    activeDrawer = name;
+                    const isNotifications = name === 'notifications';
+                    notificationDrawer.classList.toggle('is-open', isNotifications);
+                    resourceDrawer.classList.toggle('is-open', name === 'resources');
+                    notificationDrawer.setAttribute('aria-hidden', String(!isNotifications));
+                    resourceDrawer.setAttribute('aria-hidden', String(name !== 'resources'));
+                    notificationToggle.setAttribute('aria-expanded', String(isNotifications));
+                    resourceToggle.setAttribute('aria-expanded', String(name === 'resources'));
+                    backdrop.hidden = false;
+                    document.body.classList.add('arm-drawer-open');
+                    if (isNotifications) notificationClose.focus();
+                    else {
+                        resourceClose.focus();
+                        refreshResources();
+                    }
                 }
-                toggle.addEventListener('click', function () { setOpen(!drawer.classList.contains('is-open')); });
-                close.addEventListener('click', function () { setOpen(false); });
-                backdrop.addEventListener('click', function () { setOpen(false); });
-                document.addEventListener('keydown', function (event) {
-                    if (event.key === 'Escape' && drawer.classList.contains('is-open')) setOpen(false);
+                function closeDrawer() {
+                    if (!activeDrawer) return;
+                    const previous = activeDrawer;
+                    activeDrawer = null;
+                    notificationDrawer.classList.remove('is-open');
+                    resourceDrawer.classList.remove('is-open');
+                    notificationDrawer.setAttribute('aria-hidden', 'true');
+                    resourceDrawer.setAttribute('aria-hidden', 'true');
+                    notificationToggle.setAttribute('aria-expanded', 'false');
+                    resourceToggle.setAttribute('aria-expanded', 'false');
+                    backdrop.hidden = true;
+                    document.body.classList.remove('arm-drawer-open');
+                    (previous === 'notifications' ? notificationToggle : resourceToggle).focus();
+                }
+
+                notificationToggle.addEventListener('click', function () {
+                    if (activeDrawer === 'notifications') closeDrawer(); else openDrawer('notifications');
                 });
-                function metric(id, value) { const node = document.getElementById(id); if (node) node.textContent = value; }
-                function bar(id, value) { const node = document.getElementById(id); if (node) node.style.width = Math.max(0, Math.min(100, Number(value) || 0)) + '%'; }
+                resourceToggle.addEventListener('click', function () {
+                    if (activeDrawer === 'resources') closeDrawer(); else openDrawer('resources');
+                });
+                notificationClose.addEventListener('click', closeDrawer);
+                resourceClose.addEventListener('click', closeDrawer);
+                backdrop.addEventListener('click', closeDrawer);
+                document.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape') closeDrawer();
+                });
+
+                function metric(id, value) {
+                    const node = document.getElementById(id);
+                    if (node) node.textContent = value;
+                }
+                function bar(id, value) {
+                    const node = document.getElementById(id);
+                    if (node) node.style.width = Math.max(0, Math.min(100, Number(value) || 0)) + '%';
+                }
                 async function refreshResources() {
                     try {
-                        const response = await fetch('{{ url_for("route_settings.resource_metrics") }}', {cache: 'no-store', credentials: 'same-origin'});
+                        const response = await fetch('{{ url_for("route_settings.resource_metrics") }}',
+                            {cache: 'no-store', credentials: 'same-origin'});
                         if (!response.ok) throw new Error('HTTP ' + response.status);
                         const data = await response.json();
                         metric('armResourceCpu', data.cpu_percent == null ? 'Unavailable' : data.cpu_percent + '%');
@@ -59,17 +143,50 @@
                         metric('armResourceMemoryPercent', data.memory_percent == null ? 'Unavailable' : data.memory_percent + '%');
                         bar('armResourceCpuBar', data.cpu_percent);
                         bar('armResourceMemoryBar', data.memory_percent);
-                        metric('armResourceStatus', 'Updated ' + new Date().toLocaleTimeString() + (data.scope ? ' · ' + data.scope : ''));
+                        metric('armResourceStatus', 'Updated ' + new Date().toLocaleTimeString() +
+                            (data.scope ? ' · ' + data.scope : ''));
                     } catch (error) {
                         metric('armResourceStatus', 'Unable to refresh readings. Check the server session and logs.');
                     }
                 }
-                refreshResources();
+
+                if (notificationClear) {
+                    notificationClear.addEventListener('click', async function () {
+                        notificationClear.disabled = true;
+                        metric('armNotificationStatus', 'Clearing notifications…');
+                        try {
+                            const response = await fetch('{{ url_for("route_notifications.arm_notification_clear") }}', {
+                                method: 'POST',
+                                cache: 'no-store',
+                                credentials: 'same-origin',
+                                headers: {
+                                    'X-CSRFToken': (document.getElementById('armNotificationCsrf') || {}).value || '',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                }
+                            });
+                            if (!response.ok) throw new Error('HTTP ' + response.status);
+                            const data = await response.json();
+                            if (!data.success) throw new Error(data.message || 'Request failed');
+                            const items = document.getElementById('armNotificationItems');
+                            if (items) items.innerHTML = '<p id="armNotificationEmpty">No new notifications.</p>';
+                            metric('armNotificationCount', '0');
+                            const count = document.getElementById('armNotificationCount');
+                            if (count) count.hidden = true;
+                            metric('armNotificationUnreadLabel', '0 unread');
+                            metric('armNotificationStatus', 'Cleared ' + data.cleared_count + ' notification(s).');
+                        } catch (error) {
+                            metric('armNotificationStatus', 'Could not clear notifications. Please try again.');
+                            notificationClear.disabled = false;
+                        }
+                    });
+                }
+
                 window.setInterval(function () {
-                    if (drawer.classList.contains('is-open')) refreshResources();
+                    if (activeDrawer === 'resources') refreshResources();
                 }, 5000);
             })();
         </script>
+
         <!-- Errors -->
         <main id="content" class="content arm-main-content">
             {% with messages = get_flashed_messages(with_categories=true) %}
