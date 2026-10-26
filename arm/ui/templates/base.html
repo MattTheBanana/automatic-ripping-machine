@@ -40,6 +40,7 @@
                 </div>
                 <button type="button" id="armNotificationClose" class="btn btn-outline-secondary" aria-label="Close notifications">Close</button>
             </div>
+            <input type="hidden" id="armNotificationCsrf" value="{{ csrf_token() }}">
             <div class="arm-notification-drawer-actions">
                 <span id="armNotificationUnreadLabel">{{ notify_count or 0 }} unread</span>
                 <button type="button" id="armNotificationClear" class="btn btn-outline-secondary"{% if not notify_count %} disabled{% endif %}>Clear all</button>
@@ -158,7 +159,10 @@
                                 method: 'POST',
                                 cache: 'no-store',
                                 credentials: 'same-origin',
-                                headers: {'X-Requested-With': 'XMLHttpRequest'}
+                                headers: {
+                                    'X-CSRFToken': (document.getElementById('armNotificationCsrf') || {}).value || '',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                }
                             });
                             if (!response.ok) throw new Error('HTTP ' + response.status);
                             const data = await response.json();
