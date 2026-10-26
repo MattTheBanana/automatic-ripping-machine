@@ -183,49 +183,6 @@
             })();
         </script>
 
-                const drawer = document.getElementById('armResourceDrawer');
-                const toggle = document.getElementById('armResourceToggle');
-                const close = document.getElementById('armResourceClose');
-                const backdrop = document.getElementById('armResourceBackdrop');
-                if (!drawer || !toggle || !close || !backdrop) return;
-                function setOpen(open) {
-                    drawer.classList.toggle('is-open', open);
-                    backdrop.hidden = !open;
-                    drawer.setAttribute('aria-hidden', String(!open));
-                    toggle.setAttribute('aria-expanded', String(open));
-                    if (open) close.focus(); else toggle.focus();
-                    if (open) refreshResources();
-                }
-                toggle.addEventListener('click', function () { setOpen(!drawer.classList.contains('is-open')); });
-                close.addEventListener('click', function () { setOpen(false); });
-                backdrop.addEventListener('click', function () { setOpen(false); });
-                document.addEventListener('keydown', function (event) {
-                    if (event.key === 'Escape' && drawer.classList.contains('is-open')) setOpen(false);
-                });
-                function metric(id, value) { const node = document.getElementById(id); if (node) node.textContent = value; }
-                function bar(id, value) { const node = document.getElementById(id); if (node) node.style.width = Math.max(0, Math.min(100, Number(value) || 0)) + '%'; }
-                async function refreshResources() {
-                    try {
-                        const response = await fetch('{{ url_for("route_settings.resource_metrics") }}', {cache: 'no-store', credentials: 'same-origin'});
-                        if (!response.ok) throw new Error('HTTP ' + response.status);
-                        const data = await response.json();
-                        metric('armResourceCpu', data.cpu_percent == null ? 'Unavailable' : data.cpu_percent + '%');
-                        metric('armResourceMemoryUsed', data.memory_used_gb == null ? 'Unavailable' : data.memory_used_gb + ' GB');
-                        metric('armResourceMemoryAvailable', data.memory_available_gb == null ? 'Unavailable' : data.memory_available_gb + ' GB');
-                        metric('armResourceMemoryPercent', data.memory_percent == null ? 'Unavailable' : data.memory_percent + '%');
-                        bar('armResourceCpuBar', data.cpu_percent);
-                        bar('armResourceMemoryBar', data.memory_percent);
-                        metric('armResourceStatus', 'Updated ' + new Date().toLocaleTimeString() + (data.scope ? ' · ' + data.scope : ''));
-                    } catch (error) {
-                        metric('armResourceStatus', 'Unable to refresh readings. Check the server session and logs.');
-                    }
-                }
-                refreshResources();
-                window.setInterval(function () {
-                    if (drawer.classList.contains('is-open')) refreshResources();
-                }, 5000);
-            })();
-        </script>
         <!-- Errors -->
         <main id="content" class="content arm-main-content">
             {% with messages = get_flashed_messages(with_categories=true) %}
