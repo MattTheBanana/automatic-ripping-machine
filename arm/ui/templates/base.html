@@ -5,6 +5,71 @@
     <body class="arm-body">
         <!-- HTML Navigation -->
         {% include 'nav.html' %}
+        <button type="button" id="armResourceToggle" class="arm-resource-tab"
+                aria-controls="armResourceDrawer" aria-expanded="false" aria-label="Open resource monitor">
+            <span aria-hidden="true">▤</span><span>Resources</span><span class="arm-resource-tab-edge" aria-hidden="true">›</span>
+        </button>
+        <div id="armResourceBackdrop" class="arm-notification-backdrop" hidden></div>
+        <aside id="armResourceDrawer" class="arm-resource-drawer" aria-hidden="true" aria-labelledby="armResourceHeading">
+            <div class="arm-notification-drawer-header">
+                <div><h2 id="armResourceHeading">Resource monitor</h2><p>Live readings from ARM's runtime</p></div>
+                <button type="button" id="armResourceClose" class="btn btn-outline-secondary" aria-label="Close resource monitor">Close</button>
+            </div>
+            <p id="armResourceStatus" class="arm-resource-status" role="status">Loading current readings…</p>
+            <div class="arm-resource-metric"><span>CPU usage</span><strong id="armResourceCpu">—</strong></div>
+            <div class="arm-resource-progress"><span id="armResourceCpuBar"></span></div>
+            <div class="arm-resource-metric"><span>Memory used</span><strong id="armResourceMemoryUsed">—</strong></div>
+            <div class="arm-resource-metric"><span>Memory available</span><strong id="armResourceMemoryAvailable">—</strong></div>
+            <div class="arm-resource-metric"><span>Memory usage</span><strong id="armResourceMemoryPercent">—</strong></div>
+            <div class="arm-resource-progress"><span id="armResourceMemoryBar"></span></div>
+            <p class="arm-resource-note">Container limits and host-wide memory reporting vary by TrueNAS configuration. These readings do not imply that memory is reserved for ARM or account for all ZFS ARC behavior.</p>
+            <p><a href="{{ url_for('route_settings.settings') }}#system">Open system information</a></p>
+        </aside>
+        <script>
+            (function () {
+                const drawer = document.getElementById('armResourceDrawer');
+                const toggle = document.getElementById('armResourceToggle');
+                const close = document.getElementById('armResourceClose');
+                const backdrop = document.getElementById('armResourceBackdrop');
+                if (!drawer || !toggle || !close || !backdrop) return;
+                function setOpen(open) {
+                    drawer.classList.toggle('is-open', open);
+                    backdrop.hidden = !open;
+                    drawer.setAttribute('aria-hidden', String(!open));
+                    toggle.setAttribute('aria-expanded', String(open));
+                    if (open) close.focus(); else toggle.focus();
+                    if (open) refreshResources();
+                }
+                toggle.addEventListener('click', function () { setOpen(!drawer.classList.contains('is-open')); });
+                close.addEventListener('click', function () { setOpen(false); });
+                backdrop.addEventListener('click', function () { setOpen(false); });
+                document.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape' && drawer.classList.contains('is-open')) setOpen(false);
+                });
+                function metric(id, value) { const node = document.getElementById(id); if (node) node.textContent = value; }
+                function bar(id, value) { const node = document.getElementById(id); if (node) node.style.width = Math.max(0, Math.min(100, Number(value) || 0)) + '%'; }
+                async function refreshResources() {
+                    try {
+                        const response = await fetch('{{ url_for("route_settings.resource_metrics") }}', {cache: 'no-store', credentials: 'same-origin'});
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        const data = await response.json();
+                        metric('armResourceCpu', data.cpu_percent == null ? 'Unavailable' : data.cpu_percent + '%');
+                        metric('armResourceMemoryUsed', data.memory_used_gb == null ? 'Unavailable' : data.memory_used_gb + ' GB');
+                        metric('armResourceMemoryAvailable', data.memory_available_gb == null ? 'Unavailable' : data.memory_available_gb + ' GB');
+                        metric('armResourceMemoryPercent', data.memory_percent == null ? 'Unavailable' : data.memory_percent + '%');
+                        bar('armResourceCpuBar', data.cpu_percent);
+                        bar('armResourceMemoryBar', data.memory_percent);
+                        metric('armResourceStatus', 'Updated ' + new Date().toLocaleTimeString() + (data.scope ? ' · ' + data.scope : ''));
+                    } catch (error) {
+                        metric('armResourceStatus', 'Unable to refresh readings. Check the server session and logs.');
+                    }
+                }
+                refreshResources();
+                window.setInterval(function () {
+                    if (drawer.classList.contains('is-open')) refreshResources();
+                }, 5000);
+            })();
+        </script>
         <!-- Errors -->
         <main id="content" class="content arm-main-content">
             {% with messages = get_flashed_messages(with_categories=true) %}
