@@ -85,6 +85,7 @@ def arm_notification_close():
 
     return redirect("/notificationview")
 
+
 @route_notifications.route('/notificationclear', methods=['POST'])
 @login_required
 def arm_notification_clear():
