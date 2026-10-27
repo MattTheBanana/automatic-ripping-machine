@@ -95,6 +95,9 @@ function buildDiscMetadataBadges(job) {
     const last = positiveNumber(job.episode_end);
     if (season) badges.push(`<span class="arm-job-metadata-badge">Season ${String(season).padStart(2, "0")}</span>`);
     if (disc) badges.push(`<span class="arm-job-metadata-badge">Disc ${disc}</span>`);
+    const side = String(job.disc_side || "").trim().toUpperCase();
+    if (side === "A" || side === "B") badges.push(`<span class="arm-job-metadata-badge">Side ${side}</span>`);
+    if (hasDisplayValue(job.secondary_title)) badges.push('<span class="arm-job-metadata-badge arm-job-double-feature-badge">Double feature</span>');
     if (first && last) {
         const range = first === last ? String(first).padStart(2, "0")
             : `${String(first).padStart(2, "0")}–${String(last).padStart(2, "0")}`;
@@ -336,22 +339,17 @@ function titleManual(job) {
 
 function buildMiddleSection(job) {
     let x = "<div class=\"arm-job-info-column\"><div class=\"card-body px-2 py-2\">";
-    x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${job.year || "—"}</div>`;
-    x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${mediaTypeLabel(job.video_type)}</div>`;
+    x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${escapeHtml(job.year || "—")}</div>`;
+    x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${escapeHtml(mediaTypeLabel(job.video_type))}</div>`;
     x += `<div id="jobId${job.job_id}_devpath"><strong>Device: </strong>${escapeHtml(job.display_device || job.devpath || "—")}</div>`;
     x += `<div id="jobId${job.job_id}_disc_metadata" class="arm-job-metadata">${buildDiscMetadataBadges(job)}</div>`;
-    x += `<div><strong>Status: </strong><img id="jobId${job.job_id}_status" class="arm-job-status-icon" src="/static/img/${job.status}.png" width="20" height="20" alt="${job.status}" title="${job.status}"></div>`;
+    x += `<div><strong>Status: </strong><img id="jobId${job.job_id}_status" class="arm-job-status-icon" src="/static/img/${escapeHtml(job.status)}.png" width="20" height="20" alt="${escapeHtml(job.status)}" title="${escapeHtml(job.status)}"></div>`;
     x += `<div id="jobId${job.job_id}_progress_section">${transcodingCheck(job)}</div>`;
     x += "</div></div>";
     return x;
 }
 
-function buildRightSection(job, idsplit, authenticated) {
-    // idsplit[1] is undefined on the database page; use its local job identifier.
-    if (idsplit[1] === undefined) {
-        idsplit[0] = "0";
-        idsplit[1] = job.job_id;
-    }
+function buildRightSection(job, idsplit) {
     const config = job.config && typeof job.config === "object" ? job.config : {};
     const settings = job.card_settings && typeof job.card_settings === "object" ? job.card_settings : {};
     const visibilityKeys = [
@@ -360,21 +358,25 @@ function buildRightSection(job, idsplit, authenticated) {
     ];
     const anyConfigVisible = visibilityKeys.some(key => settings[key] !== false);
     const fieldDisplay = key => settings[key] === false ? ' style="display:none;"' : "";
-    let x = `<div class="arm-job-actions-column"><div class="card-body px-2 py-2 arm-job-config"${anyConfigVisible ? "" : ' style="display:none;"'}>`;
-    x += `<div id="jobId${job.job_id}_RIPPER"${fieldDisplay("show_job_ripper")}><strong>Ripper: </strong>${getRipperName(job, idsplit)}</div>`;
-    x += `<div id="jobId${job.job_id}_RIPMETHOD"${fieldDisplay("show_job_rip_method")}><strong>Rip Method: </strong>${config.RIPMETHOD || "—"}</div>`;
-    x += `<div id="jobId${job.job_id}_MAINFEATURE"${fieldDisplay("show_job_main_feature")}><strong>Main Feature: </strong>${config.MAINFEATURE || "False"}</div>`;
-    x += `<div id="jobId${job.job_id}_MINLENGTH"${fieldDisplay("show_job_min_length")}><strong>Min Length: </strong>${config.MINLENGTH || "0"}</div>`;
-    x += `<div id="jobId${job.job_id}_MAXLENGTH"${fieldDisplay("show_job_max_length")}><strong>Max Length: </strong>${config.MAXLENGTH || "—"}</div>`;
-    x += "</div><div class=\"card-body px-2 py-1 arm-job-actions\">";
-    if (authenticated === true) {
-        x += `<div class="btn-group-vertical w-100" role="group" aria-label="Job actions" ${idsplit[0] !== "0" ? "style=\"display: none;\"" : ""}>`;
-        x += `<button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${idsplit[1]}" data-href="json?job=${idsplit[1]}&mode=abandon">Abandon Job</button>`;
-        x += `<a href="logs?logfile=${job.logfile}&mode=full" class="btn btn-primary">View logfile</a>`;
-        x += musicCheck(job, idsplit);
-        x += `<button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="fixperms" data-jobid="${idsplit[1]}" data-href="json?mode=fixperms&job=${idsplit[1]}">Fix Permissions</button>`;
-        x += "</div>";
-    }
+    let x = `<div class="arm-job-actions-column"><div class="card-body px-2 py-1 arm-job-config"${anyConfigVisible ? "" : ' style="display:none;"'}>`;
+    x += `<div id="jobId${job.job_id}_RIPPER"${fieldDisplay("show_job_ripper")}><strong>Ripper: </strong>${escapeHtml(getRipperName(job, idsplit))}</div>`;
+    x += `<div id="jobId${job.job_id}_RIPMETHOD"${fieldDisplay("show_job_rip_method")}><strong>Rip Method: </strong>${escapeHtml(config.RIPMETHOD || "—")}</div>`;
+    x += `<div id="jobId${job.job_id}_MAINFEATURE"${fieldDisplay("show_job_main_feature")}><strong>Main Feature: </strong>${escapeHtml(config.MAINFEATURE || "False")}</div>`;
+    x += `<div id="jobId${job.job_id}_MINLENGTH"${fieldDisplay("show_job_min_length")}><strong>Min Length: </strong>${escapeHtml(config.MINLENGTH || "0")}</div>`;
+    x += `<div id="jobId${job.job_id}_MAXLENGTH"${fieldDisplay("show_job_max_length")}><strong>Max Length: </strong>${escapeHtml(config.MAXLENGTH || "—")}</div>`;
+    x += "</div></div>";
+    return x;
+}
+
+function buildJobActions(job, idsplit, authenticated, serverJob) {
+    if (authenticated !== true) return "";
+    const hidden = serverJob ? ' style="display:none;"' : "";
+    const jobId = encodeURIComponent(idsplit[1]);
+    let x = `<div class="arm-job-actions"><div class="btn-group-vertical w-100" role="group" aria-label="Job actions"${hidden}>`;
+    x += `<button type="button" class="btn btn-danger" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${jobId}" data-href="json?job=${jobId}&mode=abandon">Abandon Job</button>`;
+    x += `<a href="logs?logfile=${encodeURIComponent(job.logfile || "")}&mode=full" class="btn btn-outline-primary">View logfile</a>`;
+    x += musicCheck(job, idsplit);
+    x += `<button type="button" class="btn btn-outline-secondary" data-toggle="modal" data-target="#exampleModal" data-type="fixperms" data-jobid="${jobId}" data-href="json?mode=fixperms&job=${jobId}">Fix Permissions</button>`;
     x += "</div></div>";
     return x;
 }
