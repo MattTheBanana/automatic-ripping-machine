@@ -6,6 +6,7 @@ import os
 import subprocess
 import re
 import html
+import json
 from collections import deque
 from pathlib import Path
 import datetime
@@ -181,78 +182,122 @@ def find_last_regex_match(pattern, iterable):
     return None
 
 
-def process_makemkv_logfile(job, job_results):
-    """
-    Process the logfile and find current status and job progress percent\n
-    :return: job_results dict
-    """
-    job_progress_status = None
-    job_stage_index = None
-    batch_log_path = os.path.join(cfg.arm_config['LOGPATH'], 'progress', str(job.job_id)) + '.log.batchinfo'
-    lines = read_log_line(os.path.join(cfg.arm_config['LOGPATH'], 'progress', str(job.job_id)) + '.log')
-    batch_index = read_log_line(batch_log_path)
-    # Correctly get last entry for progress bar
+def parse_makemkv_progress(lines):
+    """Parse MakeMKV current-title and total-disc progress percentages.
 
-    job_progress_status = find_last_regex_match(r"PRGV:(\d{3,}),(\d+),(\d{3,})", lines)
-    job_stage_index = find_last_regex_match(r"PRGC:(\d+),(\d+),\"([\w -]{2,})\"", lines)
+    PRGV carries separate current and total progress values, both scaled by its
+    maximum field. PRGC and PRGT provide display labels; their code fields are
+    not title indexes.
+    """
+    current_title = None
+    total_title = None
+    current_title_code = None
+    progress_values = None
+    for line in lines:
+        current_match = re.search(r'PRGC:(\d+),(\d+),"(.*)"', line)
+        if current_match:
+            current_title_code = current_match.group(1)
+            try:
+                current_title = json.loads('"' + current_match.group(3) + '"')
+            except (ValueError, TypeError):
+                current_title = current_match.group(3)
+        total_match = re.search(r'PRGT:(\d+),(\d+),"(.*)"', line)
+        if total_match:
+            try:
+                total_title = json.loads('"' + total_match.group(3) + '"')
+            except (ValueError, TypeError):
+                total_title = total_match.group(3)
+        progress_match = re.search(r"PRGV:(\d+),(\d+),(\d+)", line)
+        if progress_match:
+            current_value, total_value, maximum = map(int, progress_match.groups())
+            if maximum > 0:
+                current_percent = max(0.0, min(100.0, current_value * 100.0 / maximum))
+                total_percent = max(0.0, min(100.0, total_value * 100.0 / maximum))
+                progress_values = (current_percent, total_percent)
+
+    current_percent, total_percent = progress_values if progress_values is not None else (0.0, 0.0)
+    return {
+        "current_title": current_title or "Current title",
+        "total_title": total_title or "Total disc progress",
+        "current_title_code": current_title_code,
+        "current_title_progress": current_percent,
+        "total_progress": total_percent,
+        "has_progress_values": progress_values is not None,
+    }
+
+
+def _add_progress_activity(job_results, source_path, source_label):
+    """Expose the age of the file carrying progress updates for live stall feedback."""
+    job_results["progress_activity_source"] = source_label
+    try:
+        updated_at = os.stat(source_path).st_mtime
+        job_results["progress_updated_at"] = int(updated_at)
+        job_results["progress_age_seconds"] = max(0, int(time() - updated_at))
+    except (OSError, TypeError, ValueError):
+        job_results["progress_updated_at"] = None
+        job_results["progress_age_seconds"] = None
+
+
+def process_makemkv_logfile(job, job_results):
+    """Parse MakeMKV's current-title and total-disc progress, plus progress freshness."""
+    progress_log_path = os.path.join(
+        cfg.arm_config['LOGPATH'], 'progress', str(job.job_id) + '.log'
+    )
+    batch_log_path = progress_log_path + '.batchinfo'
+    job_results["progress_kind"] = "makemkv"
+    _add_progress_activity(job_results, progress_log_path, "MakeMKV progress log")
+    try:
+        with open(progress_log_path, encoding="utf8", errors="ignore") as progress_file:
+            progress_data = parse_makemkv_progress(progress_file)
+    except OSError:
+        progress_data = parse_makemkv_progress(())
+    batch_index = read_log_line(batch_log_path)
     job_batch_info = find_last_regex_match(r"BINF:(\d{10}),(\d+),(\d+),(\d+)", batch_index)
 
-    if job_progress_status is not None:
-        app.logger.debug(f"job_progress_status: {job_progress_status}")
-        job.progress = job_results['progress'] = \
-            f"{percentage(job_progress_status.group(1), job_progress_status.group(3)):.2f}"
-        job.progress_round = percentage(job_progress_status.group(1),
-                                        job_progress_status.group(3))
-        # The ETA calc needs the batch-info (BINF) file, but that file is only
-        # written further down, in the `job_stage_index` block. On the first
-        # poll for a job it does not exist yet, so `job_batch_info` is None and
-        # `job_batch_info.group(1)` raises
-        # "'NoneType' object has no attribute 'group'", which 500s the whole
-        # /json endpoint and leaves the Active Rips card blank. Because the
-        # crash happens *before* the code that creates the BINF file, it never
-        # bootstraps and stays broken for the entire rip. Guard it (and the
-        # divide-by-zero when progress is still 0) and report an Unknown ETA
-        # until the batch info is available.
-        if job_batch_info is not None and float(job.progress) > 0:
-            job_start_time = int(job_batch_info.group(1))
-            current_time = int(time())
-            elapsed_time = current_time - job_start_time
-            total_time = int((elapsed_time * 100) / float(job.progress))
-            time_remaining = total_time - elapsed_time
-            app.logger.debug(f"ETA values for job {job.job_id}: Elapsed seconds: {elapsed_time}, "
-                             f"Percent: {job.progress}, "
-                             f"Projected time: {total_time}, "
-                             f"Time remaining: {time_remaining}"
-                             )
-            job.eta = strftime("%Hh%Mm%Ss", gmtime(time_remaining))
-        else:
-            job.eta = "Unknown"
+    current_percent = progress_data["current_title_progress"]
+    total_percent = progress_data["total_progress"]
+    job.progress = job_results["progress"] = f"{current_percent:.2f}"
+    job.progress_round = current_percent
+    job_results.update({
+        "current_title": progress_data["current_title"],
+        "current_title_progress": current_percent,
+        "current_title_progress_round": current_percent,
+        "total_progress_title": progress_data["total_title"],
+        "total_progress": total_percent,
+        "total_progress_round": total_percent,
+    })
+
+    if progress_data["has_progress_values"] and job_batch_info is not None and current_percent > 0:
+        job_start_time = int(job_batch_info.group(1))
+        elapsed_time = max(0, int(time()) - job_start_time)
+        total_time = int((elapsed_time * 100) / current_percent)
+        time_remaining = max(0, total_time - elapsed_time)
+        job.eta = strftime("%Hh%Mm%Ss", gmtime(time_remaining))
     else:
-        app.logger.debug(f"Job [{job.job_id}] MakeMKV status not defined - setting progress to 0%")
-        job.progress = job.progress_round = job_results['progress'] = 0
         job.eta = "Unknown"
 
-    if job_stage_index is not None:
+    current_title_code = progress_data["current_title_code"]
+    if current_title_code is not None or job_batch_info is not None:
         try:
-            if job_batch_info.group(4) != job_stage_index.group(1):
-                app.logger.debug(f"Appending new batch position info for job {job.job_id}: "
-                                 f"BINF:{int(time())},"
-                                 f"{job_batch_info.group(2)},"
-                                 f"{job_batch_info.group(3)},"
-                                 f"{job_stage_index.group(1)}"
-                                 )
-                with open(batch_log_path, 'a') as f:
-                    f.write(f"\nBINF:{int(time())},"
-                            f"{job_batch_info.group(2)},"
-                            f"{job_batch_info.group(3)},"
-                            f"{job_stage_index.group(1)}"
-                            )
-            app.logger.debug(f"job_stage_index: {job_stage_index}")
-            current_index = f"Track {job_batch_info.group(2)}/{job_batch_info.group(3)}<br>{job_stage_index.group(3)}"
+            if job_batch_info is not None and current_title_code is not None:
+                if job_batch_info.group(4) != current_title_code:
+                    with open(batch_log_path, 'a', encoding="utf8") as batch_file:
+                        batch_file.write(
+                            f"\nBINF:{int(time())},{job_batch_info.group(2)},"
+                            f"{job_batch_info.group(3)},{current_title_code}"
+                        )
+            if job_batch_info is not None:
+                current_index = (
+                    f"Track {job_batch_info.group(2)}/{job_batch_info.group(3)} — "
+                    f"{progress_data['current_title']}"
+                )
+            else:
+                current_index = progress_data["current_title"]
             job.stage = job_results['stage'] = current_index
             db.session.commit()
         except Exception as error:
-            job.stage = f"Unknown -  {error}"
+            app.logger.debug("Could not update MakeMKV stage for job %s: %s", job.job_id, error)
+            job_results['stage'] = job.stage
 
     return job_results
 
@@ -265,6 +310,8 @@ def process_handbrake_logfile(logfile, job, job_results):
     :param job_results: the {} of
     :return: should be dict for the json api
     """
+    job_results["progress_kind"] = "transcode"
+    _add_progress_activity(job_results, logfile, "Job log")
     job_status = None
     job_status_index = None
     ffmpeg_job_status = None
