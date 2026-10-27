@@ -135,6 +135,7 @@ def _same_feature(first, second):
     second_id = second.get("tmdbID") or second.get("imdbID")
     if first_id and second_id:
         return first_id.casefold() == second_id.casefold()
+
     def normalize(value):
         return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
 
