@@ -40,7 +40,6 @@ class RipperException(Exception):
     pass
 
 
-
 class DriveSleepWatchdog(threading.Thread):
     """Alert when an optical-drive read appears stalled for an extended period.
 
