@@ -9,11 +9,11 @@
                 aria-controls="armNotificationDrawer" aria-expanded="false" aria-label="Open notifications">
             <span aria-hidden="true">▤</span><span>Notifications</span>
             <span id="armNotificationCount" class="arm-notification-count"{% if not notify_count %} hidden{% endif %}>{{ notify_count or 0 }}</span>
-            <span class="arm-notification-tab-edge" aria-hidden="true">‹</span>
+            <span class="arm-notification-tab-edge" aria-hidden="true">←</span>
         </button>
         <button type="button" id="armResourceToggle" class="arm-resource-tab"
                 aria-controls="armResourceDrawer" aria-expanded="false" aria-label="Open resource monitor">
-            <span aria-hidden="true">▤</span><span>Resources</span><span class="arm-resource-tab-edge" aria-hidden="true">‹</span>
+            <span aria-hidden="true">▤</span><span>Resources</span><span class="arm-resource-tab-edge" aria-hidden="true">←</span>
         </button>
         <div id="armDrawerBackdrop" class="arm-notification-backdrop" hidden></div>
         <aside id="armResourceDrawer" class="arm-resource-drawer" aria-hidden="true" aria-labelledby="armResourceHeading">
@@ -22,14 +22,52 @@
                 <button type="button" id="armResourceClose" class="btn btn-outline-secondary" aria-label="Close resource monitor">Close</button>
             </div>
             <p id="armResourceStatus" class="arm-resource-status" role="status">Loading current readings…</p>
-            <div class="arm-resource-metric"><span>CPU usage</span><strong id="armResourceCpu">—</strong></div>
-            <div class="arm-resource-progress"><span id="armResourceCpuBar"></span></div>
-            <div class="arm-resource-metric"><span>Memory used</span><strong id="armResourceMemoryUsed">—</strong></div>
-            <div class="arm-resource-metric"><span>Memory available</span><strong id="armResourceMemoryAvailable">—</strong></div>
-            <div class="arm-resource-metric"><span>Memory usage</span><strong id="armResourceMemoryPercent">—</strong></div>
-            <div class="arm-resource-progress"><span id="armResourceMemoryBar"></span></div>
-            <p class="arm-resource-note">Container limits and host-wide memory reporting vary by TrueNAS configuration. These readings do not imply that memory is reserved for ARM or account for all ZFS ARC behavior.</p>
-            <p><a href="{{ url_for('route_settings.settings') }}#system">Open system information</a></p>
+
+            <section class="arm-resource-section" aria-labelledby="armResourceSystemHeading">
+                <h3 id="armResourceSystemHeading" class="arm-resource-section-title">System</h3>
+                <div class="arm-resource-metric"><span>Name</span><strong id="armResourceName">—</strong></div>
+                <p id="armResourceDescription" class="arm-resource-description"></p>
+                <div class="arm-resource-metric"><span>CPU</span><strong id="armResourceCpuModel">—</strong></div>
+                <div class="arm-resource-metric"><span>CPU temperature</span><strong id="armResourceCpuTemp">—</strong></div>
+                <div class="arm-resource-metric"><span>CPU usage</span><strong id="armResourceCpu">—</strong></div>
+                <div class="arm-resource-progress"><span id="armResourceCpuBar"></span></div>
+            </section>
+
+            <section class="arm-resource-section" aria-labelledby="armResourceMemoryHeading">
+                <h3 id="armResourceMemoryHeading" class="arm-resource-section-title">System memory</h3>
+                <div class="arm-resource-metric"><span>Total</span><strong id="armResourceMemoryTotal">—</strong></div>
+                <div class="arm-resource-metric"><span>Used</span><strong id="armResourceMemoryUsed">—</strong></div>
+                <div class="arm-resource-metric"><span>Available</span><strong id="armResourceMemoryAvailable">—</strong></div>
+                <div class="arm-resource-metric"><span>Usage</span><strong id="armResourceMemoryPercent">—</strong></div>
+                <div class="arm-resource-progress"><span id="armResourceMemoryBar"></span></div>
+                <p class="arm-resource-note">Container limits and host-wide memory reporting vary by TrueNAS configuration. These readings describe ARM's runtime view and may not include all ZFS ARC behavior.</p>
+            </section>
+
+            <section class="arm-resource-section" aria-labelledby="armResourceStorageHeading">
+                <h3 id="armResourceStorageHeading" class="arm-resource-section-title">Storage</h3>
+                <div class="arm-resource-storage-block">
+                    <div class="arm-resource-metric"><span>Transcode usage</span><strong id="armResourceTranscodePercent">—</strong></div>
+                    <div class="arm-resource-progress"><span id="armResourceTranscodeBar"></span></div>
+                    <div class="arm-resource-metric"><span>Free space</span><strong id="armResourceTranscodeFree">—</strong></div>
+                    <div class="arm-resource-path" id="armResourceTranscodePath">—</div>
+                </div>
+                <div class="arm-resource-storage-block">
+                    <div class="arm-resource-metric"><span>Completed usage</span><strong id="armResourceCompletedPercent">—</strong></div>
+                    <div class="arm-resource-progress"><span id="armResourceCompletedBar"></span></div>
+                    <div class="arm-resource-metric"><span>Free space</span><strong id="armResourceCompletedFree">—</strong></div>
+                    <div class="arm-resource-path" id="armResourceCompletedPath">—</div>
+                </div>
+            </section>
+
+            <section class="arm-resource-section" aria-labelledby="armResourceHardwareHeading">
+                <h3 id="armResourceHardwareHeading" class="arm-resource-section-title">Hardware transcoding support</h3>
+                <div class="arm-resource-hardware-status"><span>Intel QuickSync</span><strong id="armResourceIntel">Checking</strong></div>
+                <div class="arm-resource-hardware-status"><span>Nvidia NVENC</span><strong id="armResourceNvidia">Checking</strong></div>
+                <div class="arm-resource-hardware-status"><span>AMD VCN</span><strong id="armResourceAmd">Checking</strong></div>
+                <p class="arm-resource-note">Capability detection is cached briefly because it invokes HandBrake.</p>
+                <p><a href="https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/" target="_blank" rel="noopener noreferrer">Hardware transcoding help</a></p>
+            </section>
+            <p><a href="{{ url_for('route_settings.settings') }}#system">Open system information settings</a></p>
         </aside>
         <aside id="armNotificationDrawer" class="arm-notification-drawer" aria-hidden="true"
                aria-labelledby="armNotificationHeading" role="dialog" aria-modal="true">
@@ -54,7 +92,21 @@
                             {% if notification.trigger_time %}
                                 <time datetime="{{ notification.trigger_time.isoformat() }}">{{ notification.trigger_time.strftime('%d %b %Y, %H:%M') }}</time>
                             {% endif %}
-                            {% if notification.message %}<p>{{ notification.message }}</p>{% endif %}
+                            {% if notification.message %}
+                                {% set note_message = notification.message %}
+                                {% if '[View log:' in note_message %}
+                                    {% set note_parts = note_message.rsplit('[View log:', 1) %}
+                                    {% set note_logfile = note_parts[1].split(']', 1)[0].strip() %}
+                                    {% if note_logfile.endswith('.log') and '/' not in note_logfile and '\\' not in note_logfile %}
+                                        <p>{{ note_parts[0].rstrip() }}</p>
+                                        <p><a class="btn btn-sm btn-outline-primary" href="{{ url_for('route_logs.logs', logfile=note_logfile, mode='full') }}">View log</a></p>
+                                    {% else %}
+                                        <p>{{ note_message }}</p>
+                                    {% endif %}
+                                {% else %}
+                                    <p>{{ note_message }}</p>
+                                {% endif %}
+                            {% endif %}
                         </article>
                     {% endfor %}
                 {% else %}
@@ -137,12 +189,35 @@
                             {cache: 'no-store', credentials: 'same-origin'});
                         if (!response.ok) throw new Error('HTTP ' + response.status);
                         const data = await response.json();
+                        metric('armResourceName', data.system_name || 'Unavailable');
+                        metric('armResourceDescription', data.system_description || '');
+                        metric('armResourceCpuModel', data.cpu_model || 'Unavailable');
+                        metric('armResourceCpuTemp', data.cpu_temp_c == null ? 'Not reported' : data.cpu_temp_c + '°C');
                         metric('armResourceCpu', data.cpu_percent == null ? 'Unavailable' : data.cpu_percent + '%');
+                        metric('armResourceMemoryTotal', data.memory_total_gb == null ? 'Unavailable' : data.memory_total_gb + ' GB');
                         metric('armResourceMemoryUsed', data.memory_used_gb == null ? 'Unavailable' : data.memory_used_gb + ' GB');
                         metric('armResourceMemoryAvailable', data.memory_available_gb == null ? 'Unavailable' : data.memory_available_gb + ' GB');
                         metric('armResourceMemoryPercent', data.memory_percent == null ? 'Unavailable' : data.memory_percent + '%');
                         bar('armResourceCpuBar', data.cpu_percent);
                         bar('armResourceMemoryBar', data.memory_percent);
+
+                        const transcode = data.storage_transcode || {};
+                        metric('armResourceTranscodePercent', transcode.percent == null ? 'Unavailable' : transcode.percent + '% used');
+                        metric('armResourceTranscodeFree', transcode.free_gb == null ? 'Unavailable' : transcode.free_gb + ' GB');
+                        metric('armResourceTranscodePath', transcode.path || 'Path unavailable');
+                        bar('armResourceTranscodeBar', transcode.percent);
+
+                        const completed = data.storage_completed || {};
+                        metric('armResourceCompletedPercent', completed.percent == null ? 'Unavailable' : completed.percent + '% used');
+                        metric('armResourceCompletedFree', completed.free_gb == null ? 'Unavailable' : completed.free_gb + ' GB');
+                        metric('armResourceCompletedPath', completed.path || 'Path unavailable');
+                        bar('armResourceCompletedBar', completed.percent);
+
+                        const hw = data.hw_support || {};
+                        metric('armResourceIntel', hw.intel === true ? 'Supported' : 'Not detected');
+                        metric('armResourceNvidia', hw.nvidia === true ? 'Supported' : 'Not detected');
+                        metric('armResourceAmd', hw.amd === true ? 'Supported' : 'Not detected');
+
                         metric('armResourceStatus', 'Updated ' + new Date().toLocaleTimeString() +
                             (data.scope ? ' · ' + data.scope : ''));
                     } catch (error) {
