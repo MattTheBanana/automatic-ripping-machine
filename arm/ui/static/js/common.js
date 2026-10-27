@@ -204,22 +204,18 @@ function buildRightSection(job, idsplit, authenticated) {
     }
     const config = job.config && typeof job.config === "object" ? job.config : {};
     const settings = job.card_settings && typeof job.card_settings === "object" ? job.card_settings : {};
-    let x = "<div class=\"arm-job-actions-column\"><div class=\"card-body px-2 py-2 arm-job-config\">";
-    if (settings.show_job_ripper !== false) {
-        x += `<div id="jobId${job.job_id}_RIPPER"><strong>Ripper: </strong>${getRipperName(job, idsplit)}</div>`;
-    }
-    if (settings.show_job_rip_method !== false) {
-        x += `<div id="jobId${job.job_id}_RIPMETHOD"><strong>Rip Method: </strong>${config.RIPMETHOD || "—"}</div>`;
-    }
-    if (settings.show_job_main_feature !== false) {
-        x += `<div id="jobId${job.job_id}_MAINFEATURE"><strong>Main Feature: </strong>${config.MAINFEATURE || "False"}</div>`;
-    }
-    if (settings.show_job_min_length !== false) {
-        x += `<div id="jobId${job.job_id}_MINLENGTH"><strong>Min Length: </strong>${config.MINLENGTH || "0"}</div>`;
-    }
-    if (settings.show_job_max_length !== false) {
-        x += `<div id="jobId${job.job_id}_MAXLENGTH"><strong>Max Length: </strong>${config.MAXLENGTH || "—"}</div>`;
-    }
+    const visibilityKeys = [
+        "show_job_ripper", "show_job_rip_method", "show_job_main_feature",
+        "show_job_min_length", "show_job_max_length"
+    ];
+    const anyConfigVisible = visibilityKeys.some(key => settings[key] !== false);
+    const fieldDisplay = key => settings[key] === false ? ' style="display:none;"' : "";
+    let x = `<div class="arm-job-actions-column"><div class="card-body px-2 py-2 arm-job-config"${anyConfigVisible ? "" : ' style="display:none;"'}>`;
+    x += `<div id="jobId${job.job_id}_RIPPER"${fieldDisplay("show_job_ripper")}><strong>Ripper: </strong>${getRipperName(job, idsplit)}</div>`;
+    x += `<div id="jobId${job.job_id}_RIPMETHOD"${fieldDisplay("show_job_rip_method")}><strong>Rip Method: </strong>${config.RIPMETHOD || "—"}</div>`;
+    x += `<div id="jobId${job.job_id}_MAINFEATURE"${fieldDisplay("show_job_main_feature")}><strong>Main Feature: </strong>${config.MAINFEATURE || "False"}</div>`;
+    x += `<div id="jobId${job.job_id}_MINLENGTH"${fieldDisplay("show_job_min_length")}><strong>Min Length: </strong>${config.MINLENGTH || "0"}</div>`;
+    x += `<div id="jobId${job.job_id}_MAXLENGTH"${fieldDisplay("show_job_max_length")}><strong>Max Length: </strong>${config.MAXLENGTH || "—"}</div>`;
     x += "</div><div class=\"card-body px-2 py-1 arm-job-actions\">";
     if (authenticated === true) {
         x += `<div class="btn-group-vertical w-100" role="group" aria-label="Job actions" ${idsplit[0] !== "0" ? "style=\"display: none;\"" : ""}>`;
