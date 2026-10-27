@@ -6,7 +6,9 @@ import arm.ripper.utils as ripper_utils
 from arm.api.json_api import parse_makemkv_progress
 from arm.ripper.arm_ripper import _apply_disc_feature_defaults
 
-from arm.ripper.utils import clean_for_filename, fix_job_title, format_failure_notification
+from arm.ripper.utils import (
+    clean_for_filename, fix_job_title, format_failure_notification, DuplicateRunException
+)
 from arm.ui.utils import clean_for_filename as ui_clean_for_filename
 from arm.media_metadata import parse_media_label, select_best_media_result, title_search_variants
 
@@ -232,6 +234,27 @@ class TestFailureNotificationFormatting(unittest.TestCase):
         message = format_failure_notification("disc", "failed", "../outside.log")
         self.assertIn("[View log: arm.log]", message)
 
+    def test_cancelled_job_uses_cancelled_language(self):
+        message = format_failure_notification(
+            "SHARK_BOY_AND_LAVA_GIRL", "The tray was opened.", "shark-boy.log",
+            outcome="Job cancelled",
+        )
+        self.assertIn("Job cancelled for SHARK_BOY_AND_LAVA_GIRL", message)
+        self.assertTrue(message.endswith("[View log: shark-boy.log]"))
+
+
+class TestDuplicateRunGuard(unittest.TestCase):
+    def test_duplicate_active_job_raises_benign_exception(self):
+        active_job = SimpleNamespace(
+            job_id=42, status="ripping", devpath="/dev/sr0", pid=123, pid_hash=456
+        )
+        with patch("arm.ripper.utils.db.session.query") as query, \
+                patch("arm.ripper.utils._job_process_is_alive", return_value=True):
+            query.return_value.filter.return_value.all.return_value = [active_job]
+            with self.assertRaises(DuplicateRunException):
+                ripper_utils.duplicate_run_check("/dev/sr0")
+        self.assertEqual(active_job.status, "ripping")
+
 
 class TestDriveSleepWatchdog(unittest.TestCase):
     def make_watchdog(self, status="ripping", disctype="dvd",
@@ -300,6 +323,17 @@ class TestDriveSleepWatchdog(unittest.TestCase):
         )
         self.assertFalse(watchdog._poll_once(now=100))
         self.assertFalse(watchdog._poll_once(now=1000))
+        self.assertTrue(watchdog._is_reading_from_drive())
+
+    def test_open_tray_records_cancel_reason_and_signals_ripper(self):
+        watchdog, job, _snapshot = self.make_watchdog(status="ripping", timeout=10)
+        job.pid = 12345
+        job.devpath = "/dev/sr0"
+        with patch("arm.ripper.utils.os.getpid", return_value=12345), \
+                patch("arm.ripper.utils.os.kill") as kill:
+            watchdog._abort_for_open_tray()
+        self.assertIn("tray was opened", job._arm_abort_reason.lower())
+        kill.assert_called_once_with(12345, ripper_utils.signal.SIGTERM)
 
 
 if __name__ == "__main__":
