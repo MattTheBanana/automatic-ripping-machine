@@ -35,6 +35,22 @@ from arm.media_metadata import detect_disc_metadata, safe_positive_int
 NOTIFY_TITLE = "ARM notification"
 
 
+def _email_notification_category(title, body):
+    """Classify a notification for the optional email category filters."""
+    text = "{} {}".format(title or "", body or "").lower()
+    if any(term in text for term in (
+        "error", "failed", "failure", "exception", "crash", "unable to", "aborted",
+    )):
+        return "error"
+    if any(term in text for term in (
+        "completed successfully", "successfully completed", "job completed",
+        "rip complete", "rip completed", "transcoding complete", "transcoding completed",
+        "finished successfully", "completed", "successful",
+    )):
+        return "completion"
+    return "other"
+
+
 class RipperException(Exception):
     pass
 
@@ -66,15 +82,25 @@ def notify(job, title: str, body: str):  # noqa: C901
     # Email transport is configurable and independent from the other providers.
     # Select exactly one transport so one event never sends duplicate emails.
     email_method = str(cfg.arm_config.get("EMAIL_NOTIFICATION_METHOD", "gmail_oauth")).strip().lower()
-    try:
-        if email_method == "smtp":
-            send_smtp_notification(title, body, cfg.arm_config)
-        elif email_method == "gmail_oauth":
-            send_gmail_notification(title, body, cfg.arm_config)
-        elif email_method not in ("", "none"):
-            logging.warning("Unknown email notification method: %s", email_method)
-    except Exception as error:
-        logging.warning("Email notification could not be sent: %s", type(error).__name__)
+    email_category = _email_notification_category(title, body)
+    category_setting = {
+        "error": "EMAIL_NOTIFY_ERRORS",
+        "completion": "EMAIL_NOTIFY_COMPLETION",
+        "other": "EMAIL_NOTIFY_OTHER",
+    }[email_category]
+    email_enabled = cfg.arm_config.get("EMAIL_NOTIFICATIONS_ENABLED", True)
+    category_enabled = cfg.arm_config.get(category_setting, True)
+    if str(email_enabled).strip().lower() not in ("false", "0", "no", "off") and \
+            str(category_enabled).strip().lower() not in ("false", "0", "no", "off"):
+        try:
+            if email_method == "smtp":
+                send_smtp_notification(title, body, cfg.arm_config)
+            elif email_method == "gmail_oauth":
+                send_gmail_notification(title, body, cfg.arm_config)
+            elif email_method not in ("", "none"):
+                logging.warning("Unknown email notification method: %s", email_method)
+        except Exception as error:
+            logging.warning("Email notification could not be sent: %s", type(error).__name__)
 
     # Sent to remote sites
     # Create an Apprise instance
