@@ -45,7 +45,7 @@ def _email_notification_category(title, body):
     if any(term in text for term in (
         "completed successfully", "successfully completed", "job completed",
         "rip complete", "rip completed", "transcoding complete", "transcoding completed",
-        "finished successfully", "completed", "successful",
+        "processing complete", "copying complete", "finished successfully", "completed", "successful",
     )):
         return "completion"
     return "other"
