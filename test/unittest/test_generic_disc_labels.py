@@ -9,7 +9,7 @@ class TestGenericDiscLabels(unittest.TestCase):
         for label in (
             "undefined", "video", "DVD", "disc", "disc 1", "Video 2", "CD 1",
             "DVD_VIDEO", "VIDEO_TS", "not identified", "new volume", "unknown_title",
-            "Untitled Disc",
+            "Untitled Disc", "undefined_1", "unknown_volume_1",
         ):
             with self.subTest(label=label):
                 self.assertTrue(is_generic_disc_title(label), label)
