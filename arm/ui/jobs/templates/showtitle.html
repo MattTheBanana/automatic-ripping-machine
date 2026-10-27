@@ -25,7 +25,7 @@
                     <a data-special-features-link href="{{ url_for('route_jobs.updatetitle', title=results.get('Title', ''),
                         year=results.get('Year', ''), imdbID=results.get('imdbID', ''),
                         tmdbID=results.get('tmdbID', ''), type=results.get('Type', 'movie'),
-                        poster=results.get('Poster', ''), job_id=job_id,
+                        poster=results.get('Poster', ''), plot=results.get('Plot', ''), job_id=job_id,
                         special_features='1' if special_features else '0',
                         special_features_auto='1' if special_features_auto else '0',
                         season_number=season_number if season_number is not none else '',
