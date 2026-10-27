@@ -342,7 +342,7 @@ class TestDriveSleepWatchdog(unittest.TestCase):
             status="ripping", disctype="music", timeout=10
         )
         self.assertFalse(watchdog._poll_once(now=100))
-        self.assertFalse(watchdog._poll_once(now=1000))
+        self.assertTrue(watchdog._poll_once(now=110))
         self.assertTrue(watchdog._is_reading_from_drive())
 
     def test_data_disc_is_monitored_only_while_copy_job_is_active(self):
