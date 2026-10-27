@@ -16,40 +16,84 @@ $(document).ready(function () {
     refreshJobs();
     activeTab("home");
 
-    $("#save-yes").bind("click", function () {
-        console.log(hrrref);
-        if (hrrref !== "") {
-            // Add the spinner to let them know we are loading
-            $("#m-body").append("<div class=\"d-flex justify-content-center\"><div class=\"spinner-border\" role=\"status\">" +
-                                "<span class=\"sr-only\">Loading...</span></div></div>");
-            $.get(hrrref, function (data) {
-                console.log(data.success);
-                console.log("#jobId" + activeJob);
-                if (data.success && data.mode === "abandon") {
-                    $("#id" + activeJob).remove();
-                    $("#message1 .alert-heading").html("Job was successfully abandoned");
-                    $(MODEL_ID).modal("toggle");
-                    $("#message1").removeClass("d-none");
-                    setTimeout(
-                        function () {
-                            $("#message1").addClass("d-none");
-                        },
-                        5000
-                    );
-                }
-            }, "json");
+    let modalActionComplete = false;
+    $("#save-yes").on("click", function () {
+        const button = $(this);
+        if (modalActionComplete) {
+            $(MODEL_ID).modal("hide");
+            return;
         }
+        if (!hrrref) {
+            $("#job-action-feedback").removeClass("d-none alert-info alert-success")
+                .addClass("alert alert-danger").text("No action URL was provided. Close this dialog and try again.");
+            return;
+        }
+        if (button.prop("disabled")) return;
+
+        button.prop("disabled", true).attr("aria-busy", "true")
+            .text(actionType === "abandon" ? "Abandoning…" : "Working…");
+        $("#save-no").prop("disabled", true);
+        $("#job-action-feedback").removeClass("d-none alert-success alert-danger")
+            .addClass("alert alert-info").text(actionType === "abandon"
+                ? "Stopping the job and releasing its drive. Existing files will not be deleted."
+                : "The requested action is running.");
+
+        $.ajax({url: hrrref, type: "GET", dataType: "json", timeout: 30000})
+            .done(function (data) {
+                if (data && data.success) {
+                    modalActionComplete = true;
+                    if (data.mode === "abandon") {
+                        const card = document.getElementById("jobId" + activeJob);
+                        if (card) card.remove();
+                        $("#job-action-feedback").removeClass("alert-info alert-danger")
+                            .addClass("alert alert-success")
+                            .text("Job " + activeJob + " was abandoned successfully. The process was stopped; files already written were kept.");
+                    } else {
+                        $("#job-action-feedback").removeClass("alert-info alert-danger")
+                            .addClass("alert alert-success")
+                            .text(data.message || "The action completed successfully.");
+                    }
+                    button.prop("disabled", false).removeAttr("aria-busy")
+                        .removeClass("btn-danger btn-primary").addClass("btn-secondary").text("Done");
+                    $("#save-no").hide().prop("disabled", false);
+                } else {
+                    $("#job-action-feedback").removeClass("alert-info alert-success")
+                        .addClass("alert alert-danger")
+                        .text((data && (data.Error || data.message)) || "The server did not confirm that the action completed.");
+                    button.prop("disabled", false).removeAttr("aria-busy")
+                        .text(actionType === "abandon" ? "Try again" : "Retry");
+                    $("#save-no").prop("disabled", false);
+                }
+            })
+            .fail(function (xhr, status) {
+                const detail = xhr && xhr.responseJSON && (xhr.responseJSON.Error || xhr.responseJSON.message);
+                $("#job-action-feedback").removeClass("alert-info alert-success")
+                    .addClass("alert alert-danger")
+                    .text(detail || (status === "timeout"
+                        ? "The request timed out. Check the job status before retrying."
+                        : "The request failed. Check the connection and retry."));
+                button.prop("disabled", false).removeAttr("aria-busy")
+                    .text(actionType === "abandon" ? "Try again" : "Retry");
+                $("#save-no").prop("disabled", false);
+            });
     });
-    $("#save-no").bind("click", function () {
-        $(MODEL_ID).modal("toggle");
+    $("#save-no").on("click", function () {
+        $(MODEL_ID).modal("hide");
     });
     $(MODEL_ID).on("show.bs.modal", function (event) {
-        const button = $(event.relatedTarget); // Button that triggered the modal
-        actionType = button.data("type"); // Extract info from data-* attributes
+        const button = $(event.relatedTarget);
+        actionType = button.data("type");
         hrrref = button.data("href");
         activeJob = button.data("jobid");
-        const modal = $(this);
-        updateModal(modal);
+        modalActionComplete = false;
+        $("#job-action-feedback").addClass("d-none")
+            .removeClass("alert alert-info alert-success alert-danger").text("");
+        $("#save-yes").prop("disabled", false).removeAttr("aria-busy")
+            .removeClass("btn-secondary btn-primary btn-danger")
+            .addClass(actionType === "abandon" ? "btn-danger" : "btn-primary")
+            .text(actionType === "abandon" ? "Yes, abandon job" : "Yes");
+        $("#save-no").show().prop("disabled", false).text("No");
+        updateModal($(this));
     });
 });
 
