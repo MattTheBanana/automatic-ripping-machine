@@ -378,7 +378,7 @@ function buildJobActions(job, idsplit, authenticated, serverJob) {
     const hidden = serverJob ? ' style="display:none;"' : "";
     const jobId = encodeURIComponent(idsplit[1]);
     let x = `<div class="arm-job-actions"><div class="btn-group-vertical w-100" role="group" aria-label="Job actions"${hidden}>`;
-    x += `<button type="button" class="btn btn-danger" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${jobId}" data-href="json?job=${jobId}&mode=abandon">Abandon Job</button>`;
+    x += `<button type="button" class="btn btn-danger" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${jobId}" data-cardid="${escapeHtml(job.job_id)}" data-href="json?job=${jobId}&mode=abandon">Abandon Job</button>`;
     x += `<a href="logs?logfile=${encodeURIComponent(job.logfile || "")}&mode=full" class="btn btn-outline-primary">View logfile</a>`;
     x += musicCheck(job, idsplit);
     x += `<button type="button" class="btn btn-outline-secondary" data-toggle="modal" data-target="#exampleModal" data-type="fixperms" data-jobid="${jobId}" data-href="json?mode=fixperms&job=${jobId}">Fix Permissions</button>`;
