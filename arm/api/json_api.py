@@ -245,6 +245,8 @@ def process_makemkv_logfile(job, job_results):
     )
     batch_log_path = progress_log_path + '.batchinfo'
     job_results["progress_kind"] = "makemkv"
+    # Expose only the safe basename; the logreader route resolves it inside LOGPATH/progress.
+    job_results["progress_logfile"] = os.path.basename(progress_log_path)
     _add_progress_activity(job_results, progress_log_path, "MakeMKV progress log")
     try:
         with open(progress_log_path, encoding="utf8", errors="ignore") as progress_file:
