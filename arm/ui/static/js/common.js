@@ -194,7 +194,8 @@ function buildProgressMarkup(job) {
 }
 
 function buildProgressHealth(job) {
-    const age = Number(job.progress_age_seconds);
+    const age = job.progress_age_seconds === null || job.progress_age_seconds === undefined
+        ? NaN : Number(job.progress_age_seconds);
     if (!Number.isFinite(age) || !job.progress_activity_source) return "";
     const source = escapeHtml(job.progress_activity_source);
     return `<div id="jobId${job.job_id}_progress_health" class="arm-progress-health"
@@ -207,7 +208,8 @@ function buildProgressHealth(job) {
 
 function updateProgressHealth(container, job) {
     if (!container) return;
-    const age = Number(job.progress_age_seconds);
+    const age = job.progress_age_seconds === null || job.progress_age_seconds === undefined
+        ? NaN : Number(job.progress_age_seconds);
     let node = document.getElementById(`jobId${job.job_id}_progress_health`);
     if (!Number.isFinite(age) || !job.progress_activity_source) {
         if (node) node.remove();
