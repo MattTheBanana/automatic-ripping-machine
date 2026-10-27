@@ -34,6 +34,49 @@ def get_notifications():
     return notification
 
 
+def _enrich_job_card_data(job, result, card_settings):
+    """Add the normalized metadata and display values used by active job cards."""
+    detected_metadata = detect_disc_metadata(job.label, job.title, job.title_auto)
+    for field in ("season_number", "disc_number", "episode_start", "episode_end"):
+        stored_value = getattr(job, field, None)
+        result[field] = stored_value if stored_value is not None else detected_metadata.get(field)
+
+    auto_features = bool(getattr(job, "special_features_auto", True))
+    special_features = bool(getattr(job, "special_features", False))
+    if auto_features:
+        disc_number = result["disc_number"]
+        try:
+            disc_number = int(disc_number)
+        except (TypeError, ValueError):
+            disc_number = None
+        special_features = (
+            str(getattr(job, "video_type", "") or "").strip().lower() == "movie"
+            and disc_number == 2
+        )
+    result["special_features"] = special_features
+    result["special_features_auto"] = auto_features
+
+    elapsed_end = job.stop_time or datetime.datetime.now()
+    if job.start_time is not None:
+        result["elapsed_seconds"] = max(
+            0, int((elapsed_end - job.start_time).total_seconds())
+        )
+    else:
+        result["elapsed_seconds"] = None
+
+    display_device = str(job.devpath or "")
+    if card_settings["device_display_mode"] == "display" and display_device:
+        try:
+            drive = SystemDrives.query.filter_by(mount=job.devpath).first()
+            if drive:
+                display_device = str(drive.name or drive.description or display_device).strip()
+        except Exception:
+            app.logger.debug(
+                "Could not resolve display name for device %s", job.devpath, exc_info=True
+            )
+    result["display_device"] = display_device
+
+
 def get_x_jobs(job_status):
     """
     function for getting all Failed/Successful jobs \n
@@ -75,49 +118,7 @@ def get_x_jobs(job_status):
             if key != "config":
                 job_results[i][str(key)] = str(value)
 
-        # Expose explicitly detected disc metadata even before the user opens title search.
-        detected_metadata = detect_disc_metadata(j.label, j.title, j.title_auto)
-        for field in ("season_number", "disc_number", "episode_start", "episode_end"):
-            stored_value = getattr(j, field, None)
-            job_results[i][field] = (
-                stored_value if stored_value is not None else detected_metadata.get(field)
-            )
-        auto_features = bool(getattr(j, "special_features_auto", True))
-        special_features = bool(getattr(j, "special_features", False))
-        if auto_features:
-            disc_number = job_results[i]["disc_number"]
-            try:
-                disc_number = int(disc_number)
-            except (TypeError, ValueError):
-                disc_number = None
-            special_features = (
-                str(getattr(j, "video_type", "") or "").strip().lower() == "movie"
-                and disc_number == 2
-            )
-        job_results[i]["special_features"] = special_features
-        job_results[i]["special_features_auto"] = auto_features
-
-        # Add browser-friendly values for active-job cards. Job.get_d() stringifies
-        # everything, so elapsed_seconds must be explicitly numeric for live updates.
-        elapsed_end = j.stop_time or datetime.datetime.now()
-        if j.start_time is not None:
-            job_results[i]["elapsed_seconds"] = max(
-                0, int((elapsed_end - j.start_time).total_seconds())
-            )
-        else:
-            job_results[i]["elapsed_seconds"] = None
-        job_results[i]["special_features"] = bool(getattr(j, "special_features", False))
-        job_results[i]["card_settings"] = card_settings
-
-        display_device = str(j.devpath or "")
-        if card_settings["device_display_mode"] == "display" and display_device:
-            try:
-                drive = SystemDrives.query.filter_by(mount=j.devpath).first()
-                if drive:
-                    display_device = str(drive.name or drive.description or display_device).strip()
-            except Exception:
-                app.logger.debug("Could not resolve display name for device %s", j.devpath, exc_info=True)
-        job_results[i]["display_device"] = display_device
+        _enrich_job_card_data(j, job_results[i], card_settings)
         i += 1
     if jobs:
         app.logger.debug("jobs  - we have " + str(len(job_results)) + " jobs")
