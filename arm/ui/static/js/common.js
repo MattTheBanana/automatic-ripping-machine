@@ -388,21 +388,21 @@ function pingReadNotify(toastId) {
 
 function notificationBodyMarkup(body) {
     const raw = String(body === null || body === undefined ? "" : body);
-    const marker = raw.match(/\\[View log:([^\\]\\r\\n]+?\\.log)\\]/i);
+    const marker = raw.match(/\[View log:([^\]\r\n]+?\.log)\]/i);
     let markup = escapeHtml(raw);
     if (marker) {
         const filename = marker[1].trim();
-        if (filename && filename.indexOf("/") === -1 && filename.indexOf("\\\\") === -1) {
+        if (filename && filename.indexOf("/") === -1 && filename.indexOf(String.fromCharCode(92)) === -1) {
             const action = `<a class="btn btn-sm btn-outline-primary arm-toast-action" href="logs?logfile=${encodeURIComponent(filename)}&amp;mode=full">View log</a>`;
             markup = markup.replace(escapeHtml(marker[0]), action);
         }
     }
-    return markup.replace(/\\r?\\n/g, "<br>");
+    return markup.replace(/\r?\n/g, "<br>");
 }
 
 function addToast(title, body, toastId) {
     const toastTimeout = Math.max(2500, parseInt(getNotifyTimeout(), 10) || 6500);
-    const hasLogAction = /\\[View log:[^\\]\\r\\n]+?\\.log\\]/i.test(String(body || ""));
+    const hasLogAction = /\[View log:[^\]\r\n]+?\.log\]/i.test(String(body || ""));
     const icon = /fail|error|stalled|asleep/i.test(String(title || "")) ? "fail.png" : "info.png";
     const toast = `<div id="toast${toastId}" class="toast arm-toast" role="status" aria-live="polite" aria-atomic="true" data-autohide="${hasLogAction ? "false" : "true"}" data-animation="true" data-delay="${toastTimeout}">
         <div class="toast-header">
