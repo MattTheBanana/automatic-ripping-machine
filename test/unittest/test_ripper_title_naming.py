@@ -193,7 +193,11 @@ class TestDriveSleepWatchdog(unittest.TestCase):
             stall_timeout_seconds=timeout,
         )
         snapshot = {"value": (("test-disc.log", 1, 100),)}
-        watchdog._activity_snapshot = lambda: snapshot["value"]
+
+        def snapshot_probe():
+            return snapshot["value"]
+
+        watchdog._activity_snapshot = snapshot_probe
         return watchdog, job, snapshot
 
     def test_alerts_after_stall_and_rearms_when_progress_resumes(self):
