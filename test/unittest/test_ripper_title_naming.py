@@ -325,14 +325,30 @@ class TestDriveSleepWatchdog(unittest.TestCase):
         self.assertFalse(watchdog._poll_once(now=1000))
         self.assertTrue(watchdog._is_reading_from_drive())
 
-    def test_open_tray_records_cancel_reason_and_signals_ripper(self):
+    def test_open_tray_terminates_active_reader_and_records_cancel_reason(self):
         watchdog, job, _snapshot = self.make_watchdog(status="ripping", timeout=10)
         job.pid = 12345
         job.devpath = "/dev/sr0"
+        child_process = SimpleNamespace(terminate=unittest.mock.Mock(), kill=unittest.mock.Mock())
+        parent_process = SimpleNamespace(children=unittest.mock.Mock(return_value=[child_process]))
         with patch("arm.ripper.utils.os.getpid", return_value=12345), \
+                patch("arm.ripper.utils.psutil.Process", return_value=parent_process), \
+                patch("arm.ripper.utils.psutil.wait_procs", return_value=([child_process], [])) as wait_procs, \
                 patch("arm.ripper.utils.os.kill") as kill:
             watchdog._abort_for_open_tray()
         self.assertIn("tray was opened", job._arm_abort_reason.lower())
+        child_process.terminate.assert_called_once_with()
+        wait_procs.assert_called_once()
+        kill.assert_not_called()
+
+    def test_open_tray_falls_back_to_signalling_worker_between_commands(self):
+        watchdog, job, _snapshot = self.make_watchdog(status="ripping", timeout=10)
+        job.pid = 12345
+        with patch("arm.ripper.utils.os.getpid", return_value=12345), \
+                patch("arm.ripper.utils.psutil.Process") as process, \
+                patch("arm.ripper.utils.os.kill") as kill:
+            process.return_value.children.return_value = []
+            watchdog._abort_for_open_tray()
         kill.assert_called_once_with(12345, ripper_utils.signal.SIGTERM)
 
 
