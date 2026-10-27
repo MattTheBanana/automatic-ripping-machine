@@ -126,7 +126,18 @@ def main():
     # Ripper type assessment for the various media types
     # Type: dvd/bluray
     if job.disctype in ["dvd", "bluray"]:
-        arm_ripper.rip_visual_media(have_dupes, job, log_file, job.has_track_99)
+        # Monitor only the period when ARM is reading the disc directly. If
+        # MakeMKV has already copied the data to disk, the subsequent transcode
+        # must not produce a false drive-sleep alert.
+        direct_drive_source = not arm_ripper.rip_with_mkv(job, job.has_track_99)
+        drive_watchdog = utils.DriveSleepWatchdog(
+            job, direct_drive_source=direct_drive_source
+        )
+        drive_watchdog.start()
+        try:
+            arm_ripper.rip_visual_media(have_dupes, job, log_file, job.has_track_99)
+        finally:
+            drive_watchdog.stop()
 
     # Type: Music
     elif job.disctype == "music":
