@@ -78,15 +78,20 @@ class DriveSleepWatchdog(threading.Thread):
         return self.direct_drive_source and status == JobState.TRANSCODE_ACTIVE.value
 
     def _activity_snapshot(self):
-        """Return file timestamps/sizes for the job and MakeMKV progress logs."""
+        """Return the timestamp/size of the log representing current source activity."""
         log_dir = str(cfg.arm_config.get("LOGPATH", "") or "")
+        status = str(getattr(self.job, "status", "") or "").lower()
         paths = []
-        job_log = str(getattr(self.job, "logfile", "") or "").strip()
-        if job_log:
-            paths.append(job_log if os.path.isabs(job_log) else os.path.join(log_dir, job_log))
-        job_id = getattr(self.job, "job_id", None)
-        if job_id is not None and log_dir:
-            paths.append(os.path.join(log_dir, "progress", f"{job_id}.log"))
+        if status == JobState.VIDEO_RIPPING.value:
+            # Use MakeMKV progress, not generic ARM log chatter, to detect stalled reads.
+            job_id = getattr(self.job, "job_id", None)
+            if job_id is not None and log_dir:
+                paths.append(os.path.join(log_dir, "progress", f"{job_id}.log"))
+        else:
+            # A direct-source transcode reports activity in the job log.
+            job_log = str(getattr(self.job, "logfile", "") or "").strip()
+            if job_log:
+                paths.append(job_log if os.path.isabs(job_log) else os.path.join(log_dir, job_log))
 
         snapshot = []
         for path in dict.fromkeys(paths):
