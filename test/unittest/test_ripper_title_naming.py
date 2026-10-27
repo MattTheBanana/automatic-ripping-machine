@@ -172,7 +172,6 @@ class TestMediaFolderNaming(unittest.TestCase):
         self.assertEqual(fix_job_title(job), "Unknown Title")
 
 
-
 class TestDriveSleepWatchdog(unittest.TestCase):
     def make_watchdog(self, status="ripping", disctype="dvd",
                       direct_drive_source=False, timeout=10):
