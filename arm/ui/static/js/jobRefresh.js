@@ -209,9 +209,6 @@ function updateJobItem(oldJob, job) {
         oldJob.title !== job.title || oldJob.title_manual !== job.title_manual ||
         oldJob.year !== job.year || oldJob.video_type !== job.video_type ||
         oldJob.poster_url !== job.poster_url || oldJob.plot !== job.plot;
-    if (!hasDoubleFeature && oldJob.plot === job.plot && oldJob.secondary_title === job.secondary_title) {
-        // Normal single-title cards are updated incrementally below.
-    }
     if (hasDoubleFeature && metadataLayoutChanged) {
         const card = document.getElementById(`jobId${job.job_id}`);
         if (card && card.parentNode) {
