@@ -142,12 +142,12 @@ class DriveSleepWatchdog(threading.Thread):
         label = getattr(self.job, "label", None) or getattr(self.job, "title", None) or "unidentified disc"
         minutes = max(1, int(self.stall_timeout_seconds // 60))
         title = f"Optical drive may be asleep or stalled - Job {job_id}"
-        body = (
-            f"ARM has seen no job-log or ripping-progress updates for {minutes} minutes "
-            f"while actively reading {devpath}. Job {job_id}: {label}. The drive may have "
-            "spun down, become unresponsive, or encountered a read error. Check the job log, "
-            "drive connection, and USB/power-management settings. This warning will not repeat "
-            "until activity resumes and another stall is detected."
+        body = format_failure_notification(
+            f"{devpath} Job {job_id}: {label}",
+            f"No job-log or ripping-progress updates for {minutes} minutes while reading the disc. "
+            "The drive may have spun down, become unresponsive, or encountered a read error. "
+            "Check the drive connection, USB/power management, and job log.",
+            getattr(self.job, "logfile", None) or "arm.log",
         )
         # Notifications use Flask-SQLAlchemy's thread-local session.
         with app.app_context():
