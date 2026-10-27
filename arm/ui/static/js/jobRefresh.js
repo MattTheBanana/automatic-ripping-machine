@@ -7,6 +7,7 @@
 
 let hrrref = "";
 let activeJob = null;
+let activeCardId = null;
 let actionType = null;
 var activeServers = [];
 var activeJobs = [];
@@ -43,7 +44,7 @@ $(document).ready(function () {
                 if (data && data.success) {
                     modalActionComplete = true;
                     if (data.mode === "abandon") {
-                        const card = document.getElementById("jobId" + activeJob);
+                        const card = document.getElementById("jobId" + activeCardId);
                         if (card) card.remove();
                         $("#job-action-feedback").removeClass("alert-info alert-danger")
                             .addClass("alert alert-success")
@@ -85,6 +86,7 @@ $(document).ready(function () {
         actionType = button.data("type");
         hrrref = button.data("href");
         activeJob = button.data("jobid");
+        activeCardId = button.data("cardid") || ("0_" + activeJob);
         modalActionComplete = false;
         $("#job-action-feedback").addClass("d-none")
             .removeClass("alert alert-info alert-success alert-danger").text("");
