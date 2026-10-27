@@ -139,6 +139,23 @@
                 <span id="armNotificationUnreadLabel">{{ notify_count or 0 }} unread</span>
                 <button type="button" id="armNotificationClear" class="btn btn-outline-secondary"{% if not notify_count %} disabled{% endif %}>Clear all</button>
             </div>
+            <section class="arm-notification-preferences" aria-labelledby="armNotificationPreferencesHeading">
+                <h3 id="armNotificationPreferencesHeading">Email notifications</h3>
+                {% for key, label in [
+                    ('EMAIL_NOTIFICATIONS_ENABLED', 'Enable email'),
+                    ('EMAIL_NOTIFY_ERRORS', 'Errors'),
+                    ('EMAIL_NOTIFY_COMPLETION', 'Completion'),
+                    ('EMAIL_NOTIFY_OTHER', 'Other events')
+                ] %}
+                    <label class="arm-notification-preference" for="armPreference{{ key }}">
+                        <span>{{ label }}</span>
+                        <input type="checkbox" id="armPreference{{ key }}" data-notification-preference="{{ key }}"
+                               {% if email_notification_preferences.get(key, true) %}checked{% endif %}
+                               {% if key != 'EMAIL_NOTIFICATIONS_ENABLED' and not email_notification_preferences.get('EMAIL_NOTIFICATIONS_ENABLED', true) %}disabled{% endif %}>
+                    </label>
+                {% endfor %}
+                <p id="armNotificationPreferencesStatus" class="arm-resource-note" role="status" aria-live="polite"></p>
+            </section>
             <p id="armNotificationStatus" class="arm-resource-status" role="status" aria-live="polite"></p>
             <div id="armNotificationItems">
                 {% if notifications_for_drawer %}
@@ -165,6 +182,8 @@
                 const notificationToggle = document.getElementById('armNotificationToggle');
                 const notificationClose = document.getElementById('armNotificationClose');
                 const notificationClear = document.getElementById('armNotificationClear');
+                const notificationPreferences = Array.from(document.querySelectorAll('[data-notification-preference]'));
+                const notificationPreferencesStatus = document.getElementById('armNotificationPreferencesStatus');
                 const resourceDrawer = document.getElementById('armResourceDrawer');
                 const resourceToggle = document.getElementById('armResourceToggle');
                 const resourceClose = document.getElementById('armResourceClose');
@@ -306,6 +325,48 @@
                         metric('armResourceStatus', 'System details could not be refreshed. Runtime readings may still be available.');
                     }
                 }
+
+                function updateEmailPreferenceAvailability() {
+                    const emailEnabled = document.getElementById('armPreferenceEMAIL_NOTIFICATIONS_ENABLED');
+                    notificationPreferences.forEach(function (control) {
+                        if (control.dataset.notificationPreference !== 'EMAIL_NOTIFICATIONS_ENABLED') {
+                            control.disabled = !emailEnabled || !emailEnabled.checked;
+                        }
+                    });
+                }
+                notificationPreferences.forEach(function (control) {
+                    control.addEventListener('change', async function () {
+                        const previousValue = !control.checked;
+                        control.disabled = true;
+                        if (notificationPreferencesStatus) notificationPreferencesStatus.textContent = 'Saving preferences…';
+                        try {
+                            const response = await fetch('{{ url_for("route_notifications.arm_notification_preferences") }}', {
+                                method: 'POST',
+                                cache: 'no-store',
+                                credentials: 'same-origin',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRFToken': (document.getElementById('armNotificationCsrf') || {}).value || '',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                body: JSON.stringify({
+                                    key: control.dataset.notificationPreference,
+                                    enabled: control.checked
+                                })
+                            });
+                            const data = await response.json();
+                            if (!response.ok || !data.success) throw new Error(data.message || 'Request failed');
+                            if (notificationPreferencesStatus) notificationPreferencesStatus.textContent = 'Preferences saved.';
+                        } catch (error) {
+                            control.checked = previousValue;
+                            if (notificationPreferencesStatus) notificationPreferencesStatus.textContent = 'Could not save preferences. Please try again.';
+                        } finally {
+                            control.disabled = false;
+                            updateEmailPreferenceAvailability();
+                        }
+                    });
+                });
+                updateEmailPreferenceAvailability();
 
                 if (notificationClear) {
                     notificationClear.addEventListener('click', async function () {
