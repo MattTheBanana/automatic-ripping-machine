@@ -84,6 +84,9 @@ class DriveSleepWatchdog(threading.Thread):
         status = str(getattr(self.job, "status", "") or "").lower()
         if disctype == "music":
             return status == JobState.AUDIO_RIPPING.value
+        if disctype == "data":
+            # Data-copy jobs run this watchdog only for the duration of dd.
+            return status == JobState.IDLE.value
         if disctype not in ("dvd", "bluray"):
             return False
         if status == JobState.VIDEO_RIPPING.value:
@@ -825,6 +828,9 @@ def rip_music(job, logfile):
             database_updater(args, job)
             return True
         except subprocess.CalledProcessError as ab_error:
+            abort_reason = getattr(job, "_arm_abort_reason", None)
+            if abort_reason:
+                raise RipperException(abort_reason) from ab_error
             err = f"Call to abcde failed with code: {ab_error.returncode} ({ab_error.output})"
             args = {"status": JobState.FAILURE.value, "errors": err}
             database_updater(args, job)
@@ -868,9 +874,19 @@ def rip_data(job):
         logging.info("Data rip call successful")
         success = True
     except subprocess.CalledProcessError as dd_error:
+        abort_reason = getattr(job, "_arm_abort_reason", None)
+        if abort_reason:
+            try:
+                shutil.rmtree(raw_path)
+            except OSError as cleanup_error:
+                logging.warning("Unable to clean cancelled data rip at %s: %s", raw_path, cleanup_error)
+            raise RipperException(abort_reason) from dd_error
         err = f"Data rip failed with code: {dd_error.returncode}({dd_error.output})"
         logging.error(err)
-        os.unlink(incomplete_filename)
+        try:
+            os.unlink(incomplete_filename)
+        except FileNotFoundError:
+            pass
         args = {"status": JobState.FAILURE.value, "errors": err}
         database_updater(args, job)
     try:
