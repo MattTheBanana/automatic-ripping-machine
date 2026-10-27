@@ -257,7 +257,7 @@ class DriveSleepWatchdog(threading.Thread):
             self.join(timeout=self.check_interval_seconds + 5)
 
 
-def format_failure_notification(context, error, logfile="arm.log", setup=False):
+def format_failure_notification(context, error, logfile="arm.log", setup=False, outcome="Job failed"):
     """Build a concise failure message and retain a safe, UI-actionable log reference."""
     context = " ".join(str(context or "unknown disc").split())[:64]
     logfile = str(logfile or "arm.log").strip()
@@ -266,7 +266,7 @@ def format_failure_notification(context, error, logfile="arm.log", setup=False):
         logfile = "arm.log"
 
     detail = " ".join(str(error or "Unknown error").split())
-    prefix = ("Setup failed for " if setup else "Job failed for ") + f"{context}: "
+    prefix = ("Setup failed for " if setup else f"{outcome} for ") + f"{context}: "
     normalized_error = detail.lower()
     if "cds.tray_open" in normalized_error:
         advice = " The tray is reported open; close it and retry."
