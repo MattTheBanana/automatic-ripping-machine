@@ -386,47 +386,68 @@ function pingReadNotify(toastId) {
     });
 }
 
-function addToast(title, body, toastId) {
-    // Get the toast timeout from UISettings
-    const toast_timeout = getNotifyTimeout();
-    console.log("Notification timeout: " + toast_timeout);
+function notificationBodyMarkup(body) {
+    const raw = String(body === null || body === undefined ? "" : body);
+    const marker = raw.match(/\\[View log:([^\\]\\r\\n]+?\\.log)\\]/i);
+    let markup = escapeHtml(raw);
+    if (marker) {
+        const filename = marker[1].trim();
+        if (filename && filename.indexOf("/") === -1 && filename.indexOf("\\\\") === -1) {
+            const action = `<a class="btn btn-sm btn-outline-primary arm-toast-action" href="logs?logfile=${encodeURIComponent(filename)}&amp;mode=full">View log</a>`;
+            markup = markup.replace(escapeHtml(marker[0]), action);
+        }
+    }
+    return markup.replace(/\\r?\\n/g, "<br>");
+}
 
-    const toast = `<div id="toast${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-autohide="true" data-animation="true" data-delay="${parseInt(toast_timeout)}" style="z-index:1000">
+function addToast(title, body, toastId) {
+    const toastTimeout = Math.max(2500, parseInt(getNotifyTimeout(), 10) || 6500);
+    const hasLogAction = /\\[View log:[^\\]\\r\\n]+?\\.log\\]/i.test(String(body || ""));
+    const icon = /fail|error|stalled|asleep/i.test(String(title || "")) ? "fail.png" : "info.png";
+    const toast = `<div id="toast${toastId}" class="toast arm-toast" role="status" aria-live="polite" aria-atomic="true" data-autohide="${hasLogAction ? "false" : "true"}" data-animation="true" data-delay="${toastTimeout}">
         <div class="toast-header">
-            <img src="static/img/success.png" class="rounded mr-2" alt="arm message" height="20px" width="20px">
-                <strong class="mr-auto">${title}</strong>
-                <small class="text-muted">just now</small>
-                <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+            <img src="/static/img/${icon}" class="rounded mr-2" alt="" height="18" width="18">
+            <strong class="mr-auto">${escapeHtml(title)}</strong>
+            <small class="text-muted">just now</small>
+            <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Dismiss notification">
+                <span aria-hidden="true">&times;</span>
+            </button>
         </div>
-        <div class="toast-body">
-            ${body}
-        </div>
+        <div class="toast-body">${notificationBodyMarkup(body)}</div>
     </div>`;
     $("#toastHolder").append(toast);
     const newToast = $(`#toast${toastId}`);
-    newToast.toast('show');
-    newToast.on('hidden.bs.toast', function () {
-        // do something...
-        pingReadNotify(toastId)
-    })
+    newToast.toast("show");
+    newToast.on("click", ".arm-toast-action", function () {
+        pingReadNotify(toastId);
+    });
+    newToast.on("hidden.bs.toast", function () {
+        pingReadNotify(toastId);
+    });
 }
 
-// Get the toast timeout settings from UI Settings via JSON
+// Cache the timeout setting. The old asynchronous request always returned the default
+// value immediately, before the configured timeout had arrived.
+let cachedNotifyTimeout = 6500;
+let notifyTimeoutRequested = false;
+
 function getNotifyTimeout() {
-    // initilise notify and set a default of 6.5 seconds
-    let notify = 6500;
-
-    $.ajax({
-        url: "/json?mode=notify_timeout",
-        type: "get",
-        timeout: 2000,
-        success: function (data) {
-            console.log("UI timeout: " + data.notify_timeout);
-            notify = data.notify_timeout;
-        }
-    });
-
-    return notify;
+    if (!notifyTimeoutRequested) {
+        notifyTimeoutRequested = true;
+        $.ajax({
+            url: "/json?mode=notify_timeout",
+            type: "get",
+            timeout: 2000,
+            success: function (data) {
+                const configured = parseInt(data.notify_timeout, 10);
+                if (Number.isFinite(configured) && configured >= 1000) {
+                    cachedNotifyTimeout = configured;
+                }
+            },
+            error: function () {
+                notifyTimeoutRequested = false;
+            }
+        });
+    }
+    return cachedNotifyTimeout;
 }
