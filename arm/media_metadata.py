@@ -33,6 +33,29 @@ world year young zero zone
 """.split())
 
 
+# Common filesystem labels that are not useful metadata search terms.
+_GENERIC_DISC_TITLES = {
+    "", "undefined", "unknown", "not identified", "unidentified", "untitled",
+    "none", "null", "n a", "na", "video", "videos", "dvd", "dvd video",
+    "video dvd", "video ts", "audio ts", "blu ray", "bluray", "bd video",
+    "disc", "disk", "disc title", "disk title", "title", "movie", "film",
+    "data", "data disc", "volume", "track", "no title", "no name",
+    "default", "generic", "new volume", "isoimage", "iso image",
+}
+
+
+def is_generic_disc_title(value):
+    """Return True when a disc label is too generic for metadata lookup."""
+    normalized = re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+    normalized = re.sub(r"\\s+", " ", normalized)
+    if normalized in _GENERIC_DISC_TITLES:
+        return True
+    return bool(re.fullmatch(
+        r"(?:dvd|video|disc|disk|title|volume|track|movie|film)(?:\\s+(?:\\d+|[a-z]))?",
+        normalized,
+    ))
+
+
 def _fallback_split_compound(value):
     """Split compact titles only if all parts form a known-word segmentation."""
     value = re.sub(r"[^a-z]", "", str(value).lower())
@@ -55,7 +78,7 @@ def _fallback_split_compound(value):
 def title_search_variants(title):
     """Produce ordered, distinct query variants for joined-word disc labels."""
     raw = str(title or "").strip()
-    if not raw:
+    if not raw or is_generic_disc_title(raw):
         return []
     normalized = re.sub(r"[_+]+", " ", raw)
     normalized = re.sub(r"\s+", " ", normalized).strip()
@@ -201,7 +224,7 @@ def parse_media_label(label):
     working = re.sub(r"[\[\](){}]", " ", working)
     working = re.sub(r"[^A-Za-z0-9\s'-]", " ", working)
     working = re.sub(r"\s+", " ", working).strip(" -_.")
-    if not working:
+    if not working or is_generic_disc_title(working):
         return result
     variants = title_search_variants(working)
     if " " not in working and len(variants) > 1:
