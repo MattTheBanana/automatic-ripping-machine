@@ -37,7 +37,7 @@ world year young zero zone
 _GENERIC_DISC_TITLES = {
     "", "undefined", "unknown", "not identified", "unidentified", "untitled",
     "none", "null", "n a", "na", "video", "videos", "dvd", "dvd video",
-    "video dvd", "video ts", "audio ts", "blu ray", "bluray", "bd video",
+    "video dvd", "dvd video", "video ts", "audio ts", "blu ray", "bluray", "bd video",
     "disc", "disk", "disc title", "disk title", "title", "movie", "film",
     "data", "data disc", "volume", "track", "no title", "no name",
     "default", "generic", "new volume", "isoimage", "iso image",
