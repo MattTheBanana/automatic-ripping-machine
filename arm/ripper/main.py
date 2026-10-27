@@ -36,6 +36,7 @@ from arm.ui.settings import DriveUtils as drive_utils  # noqa E402
 job: Optional[Job] = None
 args: Optional[Namespace] = None
 log_file: Optional[str] = None
+_job_registered = False
 
 
 def entry():
@@ -171,9 +172,13 @@ def setup():
     global job
     global args
     global log_file
+    global _job_registered
+
+    _job_registered = False
 
     def signal_handler(_signal, _frame_type):
-        raise utils.RipperException("Received SIGTERM")
+        abort_reason = getattr(job, "_arm_abort_reason", None) if job is not None else None
+        raise utils.RipperException(abort_reason or "Received SIGTERM")
 
     # Handle SIGTERM so we can exit gracefully. Without this, no except: or finally: blocks are
     # run and the program exits immediately, potentially leaving the database in an invalid state.
@@ -189,17 +194,32 @@ def setup():
     utils.arm_setup(arm_log)
     drive = SystemDrives.query.filter_by(mount=devpath).one()  # unique mounts
 
+    # Duplicate udev events are normal on some optical drives. Check before creating a
+    # Job object so a second launch cannot produce a false failure or touch the tray.
+    utils.duplicate_run_check(devpath)
+
     # With some drives and some disks, there is a race condition between creating the Job()
     # below and the drive being ready, so give it a chance to get ready (observed with LG SP80NB80)
     for num in range(1, 11):
         drive.tray_status()
         if drive.ready:
             break
+        if drive.open:
+            raise utils.DriveNotReadyException(
+                f"Drive tray is open on {devpath}; no rip was started."
+            )
         msg = f"[{num} of 10] Drive [{drive.mount}] appears to be empty or is not ready. Waiting 1s"
         logging.info(msg)
         time.sleep(1)
     else:  # no break
-        raise utils.RipperException(f"Timed out waiting for drive to be ready (ioctl tray status: {drive.tray}).")
+        drive.tray_status()
+        if drive.open:
+            raise utils.DriveNotReadyException(
+                f"Drive tray is open on {devpath}; no rip was started."
+            )
+        raise utils.RipperException(
+            f"Timed out waiting for drive to be ready (ioctl tray status: {drive.tray})."
+        )
 
     # ARM Job starts
     # Create new job
@@ -212,14 +232,12 @@ def setup():
     job.arm_version = arminfo.arm_version
     arminfo.get_values()
 
-    # Sometimes drives trigger twice this stops multi runs from 1 udev trigger
-    utils.duplicate_run_check(devpath)
-
     logging.info(f"************* Starting ARM processing at {datetime.datetime.now()} *************")
     # Set job status and start time
     job.status = JobState.IDLE.value
     job.start_time = datetime.datetime.now()
     utils.database_adder(job)
+    _job_registered = True
     # Sleep to lower chances of db locked - unlikely to be needed
     time.sleep(1)
     # Associate the job with the drive in the database
@@ -251,9 +269,16 @@ def setup():
 
 if __name__ == "__main__":
     job = None
+    _job_registered = False
     try:
         setup()
         main()
+    except utils.DuplicateRunException as duplicate:
+        # A second udev event is expected on some hardware; it isn't a failed rip.
+        logging.getLogger("ARM").info("Ignoring duplicate optical-drive trigger: %s", duplicate)
+    except utils.DriveNotReadyException as not_ready:
+        # An open tray/no medium is an expected drive state, not a failed job.
+        logging.getLogger("ARM").info("No rip started: %s", not_ready)
     except Exception as error:
         arm_logger = logging.getLogger("ARM")
         arm_logger.critical("A fatal error has occurred and ARM is exiting.")
@@ -263,15 +288,22 @@ if __name__ == "__main__":
         )
         arm_logger.critical("%s", error, exc_info=(error if print_stacktrace else None))
 
-        if job:
+        if job is not None and _job_registered:
             disc_context = job.title or job.label or job.devpath or f"Job {job.job_id}"
-            notification_title = f"ARM job failed: {disc_context}"[:256]
-            notification_body = utils.format_failure_notification(
-                disc_context, error, job.logfile or "arm.log"
-            )
+            abort_reason = getattr(job, "_arm_abort_reason", None)
+            if abort_reason:
+                notification_title = f"ARM job cancelled: {disc_context}"[:256]
+                notification_body = utils.format_failure_notification(
+                    disc_context, abort_reason, job.logfile or "arm.log", outcome="Job cancelled"
+                )
+            else:
+                notification_title = f"ARM job failed: {disc_context}"[:256]
+                notification_body = utils.format_failure_notification(
+                    disc_context, error, job.logfile or "arm.log"
+                )
             utils.notify(job, notification_title, notification_body)
             job.status = JobState.FAILURE.value
-            job.errors = str(error)
+            job.errors = abort_reason or str(error)
         else:
             device_path = (
                 f"/dev/{args.devpath}" if args and getattr(args, "devpath", None)
@@ -282,13 +314,14 @@ if __name__ == "__main__":
                 device_path, error, "arm.log", setup=True
             )
             utils.notify(None, notification_title, notification_body)
-        # Possibly add cleanup section here for failed job files
     else:
-        if job:
+        if job is not None and _job_registered:
             job.status = JobState.SUCCESS.value
     finally:
-        if job:
-            job.eject()  # each job stores its eject status, so it is safe to call.
+        # Only finalize jobs that were actually inserted into the database. In particular,
+        # duplicate udev triggers must never eject or finalize an active job's disc.
+        if job is not None and _job_registered:
+            job.eject()
             job.stop_time = datetime.datetime.now()
             if job.start_time:
                 job_length = job.stop_time - job.start_time
