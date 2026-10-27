@@ -142,9 +142,15 @@ def main():
 
     # Type: Music
     elif job.disctype == "music":
-        # Try to recheck music disc for auto ident
+        # Identify the disc, then monitor the physical CD read while abcde is active.
         music_brainz.main(job)
-        if utils.rip_music(job, log_file):
+        drive_watchdog = utils.DriveSleepWatchdog(job, direct_drive_source=True)
+        drive_watchdog.start()
+        try:
+            music_ripped = utils.rip_music(job, log_file)
+        finally:
+            drive_watchdog.stop()
+        if music_ripped:
             utils.notify(job, constants.NOTIFY_TITLE, f"Music CD: {job.title} {constants.PROCESS_COMPLETE}")
             utils.scan_emby()
             # This shouldn't be needed. but to be safe
