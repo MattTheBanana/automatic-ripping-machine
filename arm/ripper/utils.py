@@ -79,10 +79,13 @@ class DriveSleepWatchdog(threading.Thread):
         self._last_tray_open = None
 
     def _is_reading_from_drive(self):
-        """Return true only while a video job is expected to read its optical disc."""
-        if str(getattr(self.job, "disctype", "") or "").lower() not in ("dvd", "bluray"):
-            return False
+        """Return true only while a job is expected to read its optical disc."""
+        disctype = str(getattr(self.job, "disctype", "") or "").lower()
         status = str(getattr(self.job, "status", "") or "").lower()
+        if disctype == "music":
+            return status == JobState.AUDIO_RIPPING.value
+        if disctype not in ("dvd", "bluray"):
+            return False
         if status == JobState.VIDEO_RIPPING.value:
             return True
         return self.direct_drive_source and status == JobState.TRANSCODE_ACTIVE.value
@@ -92,7 +95,8 @@ class DriveSleepWatchdog(threading.Thread):
         log_dir = str(cfg.arm_config.get("LOGPATH", "") or "")
         status = str(getattr(self.job, "status", "") or "").lower()
         paths = []
-        if status == JobState.VIDEO_RIPPING.value:
+        disctype = str(getattr(self.job, "disctype", "") or "").lower()
+        if status == JobState.VIDEO_RIPPING.value and disctype in ("dvd", "bluray"):
             # Use MakeMKV progress, not generic ARM log chatter, to detect stalled reads.
             job_id = getattr(self.job, "job_id", None)
             if job_id is not None and log_dir:
