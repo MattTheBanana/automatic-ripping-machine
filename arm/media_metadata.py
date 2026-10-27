@@ -47,11 +47,11 @@ _GENERIC_DISC_TITLES = {
 def is_generic_disc_title(value):
     """Return True when a disc label is too generic for metadata lookup."""
     normalized = re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
-    normalized = re.sub(r"\\s+", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
     if normalized in _GENERIC_DISC_TITLES:
         return True
     return bool(re.fullmatch(
-        r"(?:dvd|video|disc|disk|title|volume|track|movie|film)(?:\\s+(?:\\d+|[a-z]))?",
+        r"(?:dvd|video|disc|disk|title|volume|track|movie|film)(?:\s+(?:\d+|[a-z]))?",
         normalized,
     ))
 
