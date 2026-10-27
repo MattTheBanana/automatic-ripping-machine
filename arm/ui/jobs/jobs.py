@@ -67,6 +67,8 @@ def _metadata_query_args(values):
 def _special_features_values(job, params=None, media_type=None, metadata_values=None):
     """Resolve automatic Disc 2 special-feature selection or an explicit user override."""
     params = params or {}
+    if str(params.get("double_feature", "")).strip().lower() in ("1", "true", "yes", "on"):
+        return {"special_features": False, "special_features_auto": False}
     auto_value = params.get("special_features_auto")
     if auto_value is None:
         automatic = bool(getattr(job, "special_features_auto", True))
@@ -128,17 +130,14 @@ def _feature_from_params(params, prefix):
             for field in _FEATURE_FIELDS}
 
 
-def _feature_query_args(feature, prefix):
-    return {f"{prefix}_{field}": feature.get(field, "") or ""
-            for field in _FEATURE_FIELDS}
-
-
 def _same_feature(first, second):
     first_id = first.get("tmdbID") or first.get("imdbID")
     second_id = second.get("tmdbID") or second.get("imdbID")
     if first_id and second_id:
         return first_id.casefold() == second_id.casefold()
-    normalize = lambda value: re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+    def normalize(value):
+        return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+
     return normalize(first.get("title")) == normalize(second.get("title")) and (
         first.get("year") or ""
     ) == (second.get("year") or "")
@@ -295,9 +294,6 @@ def customtitle():
             "title": new_title, "title_manual": new_title, "year": new_year, "year_manual": new_year,
             "imdb_id": imdb_id, "imdb_id_manual": imdb_id, "tmdb_id": tmdb_id,
             "hasnicetitle": True, "special_features": feature_values["special_features"],
-            "secondary_title": None, "secondary_year": None, "secondary_video_type": None,
-            "secondary_imdb_id": None, "secondary_tmdb_id": None,
-            "secondary_poster_url": None, "secondary_plot": None,
         }
         if request.args.get("type"):
             update_values.update({"video_type": media_type, "video_type_manual": media_type})
