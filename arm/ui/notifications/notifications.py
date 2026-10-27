@@ -14,6 +14,7 @@ import importlib
 import arm.config.config as cfg
 
 import arm.ui.utils as ui_utils
+import arm.config.config as cfg
 from arm.ui import app, db
 from arm.models.notifications import Notifications
 
@@ -38,7 +39,11 @@ def arm_nav_notify():
         app.logger.debug("Unable to load notifications for drawer", exc_info=True)
 
     return dict(notify_count=notify_count,
-                notifications_for_drawer=notifications_for_drawer)
+                notifications_for_drawer=notifications_for_drawer,
+                email_notification_preferences={key: cfg.arm_config.get(key, True) for key in (
+                    "EMAIL_NOTIFICATIONS_ENABLED", "EMAIL_NOTIFY_ERRORS",
+                    "EMAIL_NOTIFY_COMPLETION", "EMAIL_NOTIFY_OTHER"
+                )})
 
 
 @route_notifications.route('/notificationview')
