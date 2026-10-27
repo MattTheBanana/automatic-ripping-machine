@@ -15,7 +15,19 @@
                         <div class="card-body">
                             <h5 class="card-title"><b> {{ notification.title }} </b></h5>
                             <h6 class="card-subtitle mb-2 text-muted">{{ notification.diff_time }} ({{ notification.trigger_time.strftime('%d-%b-%y %H:%M') }})</h6>
-                            <p class="card-text"> {{ notification.message }} </p>
+                            {% set note_message = notification.message or '' %}
+                            {% if '[View log:' in note_message %}
+                                {% set note_parts = note_message.rsplit('[View log:', 1) %}
+                                {% set note_logfile = note_parts[1].split(']', 1)[0].strip() %}
+                                {% if note_logfile.endswith('.log') and '/' not in note_logfile and '\\' not in note_logfile %}
+                                    <p class="card-text">{{ note_parts[0].rstrip() }}</p>
+                                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('route_logs.logs', logfile=note_logfile, mode='full') }}">View log</a>
+                                {% else %}
+                                    <p class="card-text">{{ notification.message }}</p>
+                                {% endif %}
+                            {% else %}
+                                <p class="card-text">{{ notification.message }}</p>
+                            {% endif %}
                         </div>
                     </div>
                 {% endfor %}

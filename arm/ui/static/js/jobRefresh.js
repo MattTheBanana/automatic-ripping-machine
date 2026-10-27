@@ -58,61 +58,51 @@ $(document).ready(function () {
  * @param    {Class} job    current job
  * @param    {Class} oldJob    Copy of old job
  */
-function updateProgress(job, oldJob) {
-    const subProgressBar = `<div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" 
-                             aria-valuenow="${job.progress_round}" aria-valuemin="0" aria-valuemax="100" 
-                             style="width: ${job.progress_round}%">
-                             <small class="justify-content-center d-flex position-absolute w-100" style="color: black; z-index: 2;">
-                             ${job.progress}%
-                             </small></div></div>`;
-    const mainProgressBar = `<div id="jobId${job.job_id}_stage"><b>Stage: </b>${job.stage}</div>
-                             <div id="jobId${job.job_id}_progress" ><div class="progress">${subProgressBar}</div>
-                             <div id="jobId${job.job_id}_eta"><b>ETA: </b>${job.eta}</div>
-                             <div id="jobId${job.job_id}_cur_fps"><b>CUR FPS: </b>${job.cur_fps}</div>
-                             <div id="jobId${job.job_id}_avg_fps"><b>AVG FPS: </b>${job.avg_fps}</div>`;
-    const progressSection = $(`#jobId${job.job_id}_progress_section`);
-    const stage = $(`#jobId${job.job_id}_stage`);
-    const eta = $(`#jobId${job.job_id}_eta`);
-    const progressBarDiv = $(`#jobId${job.job_id}_progress`)
-    if (checkTranscodeStatus(job)) {
-        // Catch if the progress section is empty and populate it
-        if (progressSection[0].innerHTML === "" || !progressBarDiv.length) {
-            progressSection[0].innerHTML = mainProgressBar;
-        } else {
-            if (job.progress_round !== oldJob.progress_round || job.progress !== oldJob.progress) {
-                let el = progressBarDiv[0].querySelector('.progress-bar');
-                if (el) {
-                    el.style.width = `${job.progress_round}%`;
-                    el.setAttribute('aria-valuenow', job.progress_round);
-                    let small = el.querySelector('small');
-                    if (small) small.innerText = `${job.progress}%`;
-                } else {
-                    progressBarDiv[0].innerHTML = `<div class="progress">${subProgressBar}`;
-                }
-            }
-            updateContents(stage, job, "Stage", job.stage);
-            updateContents(eta, job, "ETA", job.eta);
-
-            const curFpsDiv = $(`#jobId${job.job_id}_cur_fps`);
-            const avgFpsDiv = $(`#jobId${job.job_id}_avg_fps`);
-
-            if (job.cur_fps === undefined || job.cur_fps === '-1') {
-                curFpsDiv.hide();
-            } else {
-                curFpsDiv.show();
-                updateContents(curFpsDiv, job, "CUR FPS", job.cur_fps);
-            }
-
-            if (job.avg_fps === undefined || job.avg_fps === '-1') {
-                avgFpsDiv.hide();
-            } else {
-                avgFpsDiv.show();
-                updateContents(avgFpsDiv, job, "AVG FPS", job.avg_fps);
-            }
+function updateProgress(job) {
+    const details = document.getElementById(`jobId${job.job_id}_progress_details`);
+    if (!details) return;
+    const isMakeMKV = job.status === "ripping" && job.progress_kind === "makemkv";
+    if (isMakeMKV) {
+        const currentBar = document.getElementById(`jobId${job.job_id}_current_title_progress_bar`);
+        const totalBar = document.getElementById(`jobId${job.job_id}_total_progress_bar`);
+        if (!currentBar || !totalBar) {
+            details.innerHTML = makeMKVProgressMarkup(job);
         }
+        updateContents($(`#jobId${job.job_id}_stage`), job, "Stage", job.stage || "Reading disc");
+        const currentTitle = document.getElementById(`jobId${job.job_id}_current_title_progress_title`);
+        const totalTitle = document.getElementById(`jobId${job.job_id}_total_progress_title`);
+        if (currentTitle) currentTitle.textContent = job.current_title || "Current title";
+        if (totalTitle) totalTitle.textContent = job.total_progress_title || "Total disc progress";
+        setProgressBar(job.job_id, "current_title_progress",
+            job.current_title_progress_round !== undefined ? job.current_title_progress_round : job.progress_round);
+        setProgressBar(job.job_id, "total_progress", job.total_progress_round);
+        updateContents($(`#jobId${job.job_id}_eta`), job, "ETA for current title", job.eta || "Unknown");
+    } else if (checkTranscodeStatus(job)) {
+        const progressBar = document.getElementById(`jobId${job.job_id}_progress_bar`);
+        const wasMakeMKV = document.getElementById(`jobId${job.job_id}_total_progress_bar`);
+        if (!progressBar || wasMakeMKV) {
+            details.innerHTML = standardProgressMarkup(job);
+        }
+        updateContents($(`#jobId${job.job_id}_stage`), job, "Stage", job.stage || "Working");
+        setProgressBar(job.job_id, "progress", job.progress_round);
+        updateContents($(`#jobId${job.job_id}_eta`), job, "ETA", job.eta || "Unknown");
+        const curFpsDiv = $(`#jobId${job.job_id}_cur_fps`);
+        const avgFpsDiv = $(`#jobId${job.job_id}_avg_fps`);
+        if (job.cur_fps === undefined || job.cur_fps === "-1") curFpsDiv.hide();
+        else {
+            curFpsDiv.show();
+            updateContents(curFpsDiv, job, "CUR FPS", job.cur_fps);
+        }
+        if (job.avg_fps === undefined || job.avg_fps === "-1") avgFpsDiv.hide();
+        else {
+            avgFpsDiv.show();
+            updateContents(avgFpsDiv, job, "AVG FPS", job.avg_fps);
+        }
+    } else {
+        details.innerHTML = "";
     }
+    updateProgressHealth(details, job);
 }
-
 /**
  * Checks if current job needs a stage/progress bar added
  * This is enabled for music discs to enable current ripping track in job.stage
@@ -193,7 +183,7 @@ function updateJobItem(oldJob, job) {
         elapsedNode.dataset.running = String(!["success", "fail"].includes(String(job.status || "").toLowerCase()));
         elapsedNode.textContent = formatElapsedSeconds(elapsedNode.dataset.elapsedSeconds);
     }
-    updateProgress(job, oldJob);
+    updateProgress(job);
     // Reapply current UI preferences on every refresh so cards already ripping
     // respond immediately when visibility or device-name preferences change.
     const cardSettings = job.card_settings && typeof job.card_settings === "object"

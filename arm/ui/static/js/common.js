@@ -46,6 +46,30 @@ function formatElapsedSeconds(value) {
     return days > 0 ? `${days}d ${clock}` : clock;
 }
 
+function formatActivityAge(seconds) {
+    const value = Math.max(0, Math.floor(Number(seconds) || 0));
+    if (value < 60) return `${value}s`;
+    if (value < 3600) return `${Math.floor(value / 60)}m ${value % 60}s`;
+    return `${Math.floor(value / 3600)}h ${Math.floor((value % 3600) / 60)}m`;
+}
+
+function renderProgressHealthNode(node, age) {
+    const seconds = Math.max(0, Math.floor(Number(age) || 0));
+    node.dataset.progressAgeSeconds = String(seconds);
+    const stale = seconds >= Number(node.dataset.staleThreshold || 120);
+    node.classList.toggle("arm-progress-health-stale", stale);
+    const ageValue = node.querySelector(".arm-progress-age");
+    const warning = node.querySelector(".arm-progress-warning-message");
+    if (ageValue) ageValue.textContent = formatActivityAge(seconds);
+    if (warning) {
+        warning.textContent = stale
+            ? `No new updates for ${formatActivityAge(seconds)}. The drive may be reading a difficult sector or the job may be stalled; check the job log if this continues.`
+            : "";
+    }
+    if (stale) node.setAttribute("role", "status");
+    else node.removeAttribute("role");
+}
+
 function startElapsedJobClock() {
     if (window.armElapsedJobClockStarted) return;
     window.armElapsedJobClockStarted = true;
@@ -54,6 +78,10 @@ function startElapsedJobClock() {
             const elapsed = Math.max(0, Number(node.dataset.elapsedSeconds) || 0) + 1;
             node.dataset.elapsedSeconds = String(elapsed);
             node.textContent = formatElapsedSeconds(elapsed);
+        });
+        document.querySelectorAll(".arm-progress-health[data-progress-age-seconds]").forEach(function (node) {
+            const age = Math.max(0, Number(node.dataset.progressAgeSeconds) || 0) + 1;
+            renderProgressHealthNode(node, age);
         });
     }, 1000);
 }
@@ -108,28 +136,111 @@ function addJobItem(job, authenticated) {
     return x;
 }
 
-function transcodingCheck(job) {
-    let x = "";
+function progressPercent(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    return Math.max(0, Math.min(100, number));
+}
+
+function progressBarMarkup(job, key, heading, subtitle, percentage) {
+    const value = progressPercent(percentage);
+    return `<div class="arm-progress-row">
+        <div class="arm-progress-heading">
+            <strong>${escapeHtml(heading)}</strong>
+            <span id="jobId${job.job_id}_${key}_title">${escapeHtml(subtitle || "")}</span>
+        </div>
+        <div id="jobId${job.job_id}_${key}" class="progress arm-progress-track" role="progressbar"
+             aria-label="${escapeHtml(heading)}" aria-valuenow="${value}" aria-valuemin="0" aria-valuemax="100">
+            <div id="jobId${job.job_id}_${key}_bar" class="progress-bar progress-bar-striped"
+                 style="width: ${value}%;"></div>
+            <span id="jobId${job.job_id}_${key}_value" class="arm-progress-value">${value.toFixed(1)}%</span>
+        </div>
+    </div>`;
+}
+
+function makeMKVProgressMarkup(job) {
+    let x = `<div id="jobId${job.job_id}_stage"><strong>Stage: </strong>${escapeHtml(job.stage || "Reading disc")}</div>`;
+    x += progressBarMarkup(
+        job, "total_progress", "Total disc progress",
+        job.total_progress_title || "Entire disc", job.total_progress_round
+    );
+    x += progressBarMarkup(
+        job, "current_title_progress", "Current title",
+        job.current_title || "Current title", job.current_title_progress_round !== undefined ? job.current_title_progress_round : job.progress_round
+    );
+    x += `<div id="jobId${job.job_id}_eta"><strong>ETA for current title: </strong>${escapeHtml(job.eta || "Unknown")}</div>`;
+    return x;
+}
+
+function standardProgressMarkup(job) {
+    const value = progressPercent(job.progress_round);
+    let x = `<div id="jobId${job.job_id}_stage"><strong>Stage: </strong>${escapeHtml(job.stage || "Working")}</div>`;
+    x += progressBarMarkup(job, "progress", "Progress", "", value);
+    x += `<div id="jobId${job.job_id}_eta"><strong>ETA: </strong>${escapeHtml(job.eta || "Unknown")}</div>`;
+    x += `<div id="jobId${job.job_id}_cur_fps"><strong>CUR FPS: </strong>${escapeHtml(job.cur_fps || "—")}</div>`;
+    x += `<div id="jobId${job.job_id}_avg_fps"><strong>AVG FPS: </strong>${escapeHtml(job.avg_fps || "—")}</div>`;
+    return x;
+}
+
+function buildProgressMarkup(job) {
+    if (job.status === "ripping" && job.progress_kind === "makemkv") {
+        return makeMKVProgressMarkup(job);
+    }
     if ((job.status === "transcoding" && job.stage !== "" && job.progress) ||
         (job.disctype === "music" && job.stage !== "")) {
-        x += `<div id="jobId${job.job_id}_stage"><strong>Stage: </strong>${job.stage}</div>`;
-        x += `<div id="jobId${job.job_id}_progress">`;
-        x += `<div class="progress">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
-                aria-valuenow="${job.progress_round}" aria-valuemin="0" aria-valuemax="100"
-                style="width: ${job.progress_round}%; background-color: #cbcbcb;">
-                    <small class="justify-content-center d-flex position-absolute w-100" style="color: black; z-index: 2;">
-                        ${job.progress}%
-                    </small>
-                </div>
-              </div></div>`;
-        x += `<div id="jobId${job.job_id}_eta"><strong>ETA: </strong>${job.eta}</div>`;
-        x += `<div id="jobId${job.job_id}_cur_fps"><strong>CUR FPS: </strong>${job.cur_fps}</div>`;
-        x += `<div id="jobId${job.job_id}_avg_fps"><strong>AVG FPS: </strong>${job.avg_fps}</div>`;
+        return standardProgressMarkup(job);
     }
+    return "";
+}
+
+function buildProgressHealth(job) {
+    const age = job.progress_age_seconds === null || job.progress_age_seconds === undefined
+        ? NaN : Number(job.progress_age_seconds);
+    if (!Number.isFinite(age) || !job.progress_activity_source) return "";
+    const source = escapeHtml(job.progress_activity_source);
+    return `<div id="jobId${job.job_id}_progress_health" class="arm-progress-health"
+                 data-progress-age-seconds="${Math.max(0, Math.floor(age))}" data-stale-threshold="120"
+                 data-progress-source="${source}">
+        <span>Last update to ${source}: <strong class="arm-progress-age">${formatActivityAge(age)}</strong> ago.</span>
+        <span class="arm-progress-warning-message"></span>
+    </div>`;
+}
+
+function updateProgressHealth(container, job) {
+    if (!container) return;
+    const age = job.progress_age_seconds === null || job.progress_age_seconds === undefined
+        ? NaN : Number(job.progress_age_seconds);
+    let node = document.getElementById(`jobId${job.job_id}_progress_health`);
+    if (!Number.isFinite(age) || !job.progress_activity_source) {
+        if (node) node.remove();
+        return;
+    }
+    if (!node) {
+        container.insertAdjacentHTML("beforeend", buildProgressHealth(job));
+        node = document.getElementById(`jobId${job.job_id}_progress_health`);
+    }
+    if (!node) return;
+    node.dataset.progressSource = String(job.progress_activity_source);
+    renderProgressHealthNode(node, age);
+}
+
+function setProgressBar(jobId, key, percentage) {
+    const value = progressPercent(percentage);
+    const container = document.getElementById(`jobId${jobId}_${key}`);
+    const bar = document.getElementById(`jobId${jobId}_${key}_bar`);
+    const label = document.getElementById(`jobId${jobId}_${key}_value`);
+    if (container) container.setAttribute("aria-valuenow", String(value));
+    if (bar) bar.style.width = `${value}%`;
+    if (label) label.textContent = `${value.toFixed(1)}%`;
+}
+
+function transcodingCheck(job) {
+    let x = `<div id="jobId${job.job_id}_progress_details">`;
+    x += buildProgressMarkup(job);
+    x += buildProgressHealth(job);
+    x += "</div>";
     const start = Date.parse(job.start_time);
-    const startValid = Number.isFinite(start);
-    if (startValid) {
+    if (Number.isFinite(start)) {
         const d = new Date(start);
         const datestring = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
         x += `<div><strong>Start:</strong> ${datestring} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}</div>`;
@@ -142,7 +253,6 @@ function transcodingCheck(job) {
     x += `<div id="jobId${job.job_id}_elapsed"><strong>Elapsed Job Time:</strong> <span class="arm-elapsed-time" data-elapsed-seconds="${elapsed}" data-running="${running}">${elapsedText}</span></div>`;
     return x;
 }
-
 function musicCheck(job, idsplit) {
     let x = "";
     const mediaType = String(job.video_type || "").trim().toLowerCase();
@@ -276,47 +386,68 @@ function pingReadNotify(toastId) {
     });
 }
 
-function addToast(title, body, toastId) {
-    // Get the toast timeout from UISettings
-    const toast_timeout = getNotifyTimeout();
-    console.log("Notification timeout: " + toast_timeout);
+function notificationBodyMarkup(body) {
+    const raw = String(body === null || body === undefined ? "" : body);
+    const marker = raw.match(/\[View log:([^\]\r\n]+?\.log)\]/i);
+    let markup = escapeHtml(raw);
+    if (marker) {
+        const filename = marker[1].trim();
+        if (filename && filename.indexOf("/") === -1 && filename.indexOf(String.fromCharCode(92)) === -1) {
+            const action = `<a class="btn btn-sm btn-outline-primary arm-toast-action" href="logs?logfile=${encodeURIComponent(filename)}&amp;mode=full">View log</a>`;
+            markup = markup.replace(escapeHtml(marker[0]), action);
+        }
+    }
+    return markup.replace(/\r?\n/g, "<br>");
+}
 
-    const toast = `<div id="toast${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-autohide="true" data-animation="true" data-delay="${parseInt(toast_timeout)}" style="z-index:1000">
+function addToast(title, body, toastId) {
+    const toastTimeout = Math.max(2500, parseInt(getNotifyTimeout(), 10) || 6500);
+    const hasLogAction = /\[View log:[^\]\r\n]+?\.log\]/i.test(String(body || ""));
+    const icon = /fail|error|stalled|asleep/i.test(String(title || "")) ? "fail.png" : "info.png";
+    const toast = `<div id="toast${toastId}" class="toast arm-toast" role="status" aria-live="polite" aria-atomic="true" data-autohide="${hasLogAction ? "false" : "true"}" data-animation="true" data-delay="${toastTimeout}">
         <div class="toast-header">
-            <img src="static/img/success.png" class="rounded mr-2" alt="arm message" height="20px" width="20px">
-                <strong class="mr-auto">${title}</strong>
-                <small class="text-muted">just now</small>
-                <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+            <img src="/static/img/${icon}" class="rounded mr-2" alt="" height="18" width="18">
+            <strong class="mr-auto">${escapeHtml(title)}</strong>
+            <small class="text-muted">just now</small>
+            <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Dismiss notification">
+                <span aria-hidden="true">&times;</span>
+            </button>
         </div>
-        <div class="toast-body">
-            ${body}
-        </div>
+        <div class="toast-body">${notificationBodyMarkup(body)}</div>
     </div>`;
     $("#toastHolder").append(toast);
     const newToast = $(`#toast${toastId}`);
-    newToast.toast('show');
-    newToast.on('hidden.bs.toast', function () {
-        // do something...
-        pingReadNotify(toastId)
-    })
+    newToast.toast("show");
+    newToast.on("click", ".arm-toast-action", function () {
+        pingReadNotify(toastId);
+    });
+    newToast.on("hidden.bs.toast", function () {
+        pingReadNotify(toastId);
+    });
 }
 
-// Get the toast timeout settings from UI Settings via JSON
+// Cache the timeout setting. The old asynchronous request always returned the default
+// value immediately, before the configured timeout had arrived.
+let cachedNotifyTimeout = 6500;
+let notifyTimeoutRequested = false;
+
 function getNotifyTimeout() {
-    // initilise notify and set a default of 6.5 seconds
-    let notify = 6500;
-
-    $.ajax({
-        url: "/json?mode=notify_timeout",
-        type: "get",
-        timeout: 2000,
-        success: function (data) {
-            console.log("UI timeout: " + data.notify_timeout);
-            notify = data.notify_timeout;
-        }
-    });
-
-    return notify;
+    if (!notifyTimeoutRequested) {
+        notifyTimeoutRequested = true;
+        $.ajax({
+            url: "/json?mode=notify_timeout",
+            type: "get",
+            timeout: 2000,
+            success: function (data) {
+                const configured = parseInt(data.notify_timeout, 10);
+                if (Number.isFinite(configured) && configured >= 1000) {
+                    cachedNotifyTimeout = configured;
+                }
+            },
+            error: function () {
+                notifyTimeoutRequested = false;
+            }
+        });
+    }
+    return cachedNotifyTimeout;
 }
