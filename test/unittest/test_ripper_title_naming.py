@@ -172,5 +172,71 @@ class TestMediaFolderNaming(unittest.TestCase):
         self.assertEqual(fix_job_title(job), "Unknown Title")
 
 
+
+class TestDriveSleepWatchdog(unittest.TestCase):
+    def make_watchdog(self, status="ripping", disctype="dvd",
+                      direct_drive_source=False, timeout=10):
+        job = SimpleNamespace(
+            job_id=123,
+            devpath="/dev/sr0",
+            logfile="test-disc.log",
+            status=status,
+            disctype=disctype,
+            label="Test Disc",
+            title="Test Disc",
+            stage="Ripping",
+        )
+        watchdog = ripper_utils.DriveSleepWatchdog(
+            job,
+            direct_drive_source=direct_drive_source,
+            check_interval_seconds=1,
+            stall_timeout_seconds=timeout,
+        )
+        snapshot = {"value": (("test-disc.log", 1, 100),)}
+        watchdog._activity_snapshot = lambda: snapshot["value"]
+        return watchdog, job, snapshot
+
+    def test_alerts_after_stall_and_rearms_when_progress_resumes(self):
+        watchdog, _job, snapshot = self.make_watchdog(timeout=10)
+        self.assertFalse(watchdog._poll_once(now=100))
+        self.assertFalse(watchdog._poll_once(now=109))
+        self.assertTrue(watchdog._poll_once(now=110))
+        self.assertFalse(watchdog._poll_once(now=130))
+
+        snapshot["value"] = (("test-disc.log", 2, 200),)
+        self.assertFalse(watchdog._poll_once(now=131))
+        self.assertFalse(watchdog._poll_once(now=140))
+        self.assertTrue(watchdog._poll_once(now=141))
+
+    def test_waiting_job_does_not_trigger_stall_alert(self):
+        watchdog, job, _snapshot = self.make_watchdog(status="waiting", timeout=10)
+        self.assertFalse(watchdog._poll_once(now=100))
+        self.assertFalse(watchdog._poll_once(now=1000))
+
+        job.status = "ripping"
+        self.assertFalse(watchdog._poll_once(now=1001))
+        self.assertTrue(watchdog._poll_once(now=1011))
+
+    def test_transcode_is_monitored_only_when_reading_directly_from_disc(self):
+        watchdog, _job, _snapshot = self.make_watchdog(
+            status="transcoding", direct_drive_source=False, timeout=10
+        )
+        self.assertFalse(watchdog._poll_once(now=100))
+        self.assertFalse(watchdog._poll_once(now=1000))
+
+        direct_watchdog, _job, _snapshot = self.make_watchdog(
+            status="transcoding", direct_drive_source=True, timeout=10
+        )
+        self.assertFalse(direct_watchdog._poll_once(now=100))
+        self.assertTrue(direct_watchdog._poll_once(now=110))
+
+    def test_music_jobs_are_not_monitored_as_optical_video_reads(self):
+        watchdog, _job, _snapshot = self.make_watchdog(
+            status="ripping", disctype="music", timeout=10
+        )
+        self.assertFalse(watchdog._poll_once(now=100))
+        self.assertFalse(watchdog._poll_once(now=1000))
+
+
 if __name__ == "__main__":
     unittest.main()
