@@ -75,6 +75,9 @@ def _enrich_job_card_data(job, result, card_settings):
                 "Could not resolve display name for device %s", job.devpath, exc_info=True
             )
     result["display_device"] = display_device
+    # The browser needs these preferences on every poll to render card fields
+    # correctly and update jobs that are already in progress.
+    result["card_settings"] = card_settings
 
 
 def get_x_jobs(job_status):
