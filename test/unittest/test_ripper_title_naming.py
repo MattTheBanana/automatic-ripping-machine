@@ -6,7 +6,7 @@ import arm.ripper.utils as ripper_utils
 from arm.api.json_api import parse_makemkv_progress
 from arm.ripper.arm_ripper import _apply_disc_feature_defaults
 
-from arm.ripper.utils import clean_for_filename, fix_job_title
+from arm.ripper.utils import clean_for_filename, fix_job_title, format_failure_notification
 from arm.ui.utils import clean_for_filename as ui_clean_for_filename
 from arm.media_metadata import parse_media_label, select_best_media_result, title_search_variants
 
@@ -206,6 +206,31 @@ class TestMakeMKVProgressParsing(unittest.TestCase):
         self.assertFalse(result["has_progress_values"])
         self.assertEqual(result["current_title_progress"], 0.0)
         self.assertEqual(result["total_progress"], 0.0)
+
+
+class TestFailureNotificationFormatting(unittest.TestCase):
+    def test_setup_failure_includes_drive_diagnosis_and_log_action(self):
+        message = format_failure_notification(
+            "/dev/sr0",
+            "Timed out waiting for drive to be ready (ioctl tray status: CDS.TRAY_OPEN).",
+            "arm.log",
+            setup=True,
+        )
+        self.assertIn("/dev/sr0", message)
+        self.assertIn("CDS.TRAY_OPEN", message)
+        self.assertIn("tray is reported open", message)
+        self.assertIn("[View log: arm.log]", message)
+
+    def test_long_failure_messages_keep_log_action_and_fit_notification_column(self):
+        message = format_failure_notification(
+            "A very long disc label " * 8, "read error " * 100, "disc.log"
+        )
+        self.assertLessEqual(len(message), 256)
+        self.assertTrue(message.endswith("[View log: disc.log]"))
+
+    def test_unsafe_log_paths_fall_back_to_arm_log(self):
+        message = format_failure_notification("disc", "failed", "../outside.log")
+        self.assertIn("[View log: arm.log]", message)
 
 
 class TestDriveSleepWatchdog(unittest.TestCase):
