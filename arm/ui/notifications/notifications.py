@@ -10,11 +10,10 @@ from flask_login import login_required  # noqa: F401
 from flask import render_template, Blueprint, redirect, flash, session, jsonify, request
 from datetime import datetime
 import importlib
+import os
 
 import arm.config.config as cfg
-
 import arm.ui.utils as ui_utils
-import arm.config.config as cfg
 from arm.ui import app, db
 from arm.models.notifications import Notifications
 
@@ -126,11 +125,11 @@ def arm_notification_preferences():
     key = payload.get("key")
     if key not in allowed or not isinstance(payload.get("enabled"), bool):
         return jsonify({"success": False, "message": "Invalid notification preference"}), 400
-    if ui_utils.is_read_only(cfg.arm_config_path) if hasattr(ui_utils, "is_read_only") else False:
+    if not os.access(cfg.arm_config_path, os.W_OK):
         return jsonify({"success": False, "message": "ARM configuration is read-only"}), 403
 
-    updated_config = dict(cfg.arm_config)
-    updated_config[key] = payload["enabled"]
+    updated_config = {name: str(value) for name, value in cfg.arm_config.items()}
+    updated_config[key] = "true" if payload["enabled"] else "false"
     try:
         comments = ui_utils.generate_comments()
         rendered_config = ui_utils.build_arm_cfg(updated_config, comments)
