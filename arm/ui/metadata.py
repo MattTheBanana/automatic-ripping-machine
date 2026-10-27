@@ -33,10 +33,6 @@ def call_omdb_api(title=None, year=None, imdb_id=None, plot="short"):
     if not title:
         app.logger.debug("no params")
         return None
-    if is_generic_disc_title(title):
-        app.logger.info("Skipping OMDb lookup for generic disc label: %s", title)
-        return None
-
     urls = []
     for variant in title_search_variants(title):
         encoded = urllib.parse.quote(variant)
