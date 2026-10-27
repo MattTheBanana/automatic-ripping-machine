@@ -217,7 +217,7 @@ function buildProgressHealth(job) {
         : escapeHtml(source);
     return `<div id="jobId${job.job_id}_progress_health" class="arm-progress-health"
                  data-progress-age-seconds="${Math.max(0, Math.floor(age))}" data-stale-threshold="120"
-                 data-progress-source="${escapeHtml(source)}">
+                 data-progress-source="${escapeHtml(source)}" data-progress-logfile="${escapeHtml(progressLogfile)}">
         <span>Last update to ${sourceLabel}: <strong class="arm-progress-age">${formatActivityAge(age)}</strong> ago.</span>
         <span class="arm-progress-warning-message"></span>
     </div>`;
@@ -227,17 +227,25 @@ function updateProgressHealth(container, job) {
     if (!container) return;
     const age = job.progress_age_seconds === null || job.progress_age_seconds === undefined
         ? NaN : Number(job.progress_age_seconds);
+    const source = String(job.progress_activity_source || "");
+    const progressLogfile = String(job.progress_logfile || "").trim();
     let node = document.getElementById(`jobId${job.job_id}_progress_health`);
-    if (!Number.isFinite(age) || !job.progress_activity_source) {
+    if (!Number.isFinite(age) || !source) {
         if (node) node.remove();
         return;
+    }
+    if (node && (node.dataset.progressSource !== source ||
+            node.dataset.progressLogfile !== progressLogfile)) {
+        node.remove();
+        node = null;
     }
     if (!node) {
         container.insertAdjacentHTML("beforeend", buildProgressHealth(job));
         node = document.getElementById(`jobId${job.job_id}_progress_health`);
     }
     if (!node) return;
-    node.dataset.progressSource = String(job.progress_activity_source);
+    node.dataset.progressSource = source;
+    node.dataset.progressLogfile = progressLogfile;
     renderProgressHealthNode(node, age);
 }
 
