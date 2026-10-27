@@ -18,6 +18,17 @@
             </div>
         </div>
         <input type="hidden" name="job_id" value="{{ job_id }}">
+        {% if double_feature %}
+            {% for prefix, feature in [('feature_a', feature_a), ('feature_b', feature_b)] %}
+                <input type="hidden" name="{{ prefix }}_title" value="{{ feature.title }}">
+                <input type="hidden" name="{{ prefix }}_year" value="{{ feature.year }}">
+                <input type="hidden" name="{{ prefix }}_type" value="{{ feature.type }}">
+                <input type="hidden" name="{{ prefix }}_poster" value="{{ feature.poster }}">
+                <input type="hidden" name="{{ prefix }}_imdbID" value="{{ feature.imdbID }}">
+                <input type="hidden" name="{{ prefix }}_tmdbID" value="{{ feature.tmdbID }}">
+                <input type="hidden" name="{{ prefix }}_plot" value="{{ feature.plot }}">
+            {% endfor %}
+        {% endif %}
         <div class="custom-control custom-checkbox mb-3">
             <input type="checkbox" class="custom-control-input" id="double-feature" name="double_feature" value="1" {{ 'checked' if double_feature else '' }}>
             <label class="custom-control-label" for="double-feature">This disc contains two movies or shows (double feature)</label>
@@ -139,7 +150,7 @@
                                 <input type="hidden" name="choice_imdbID" value="{{ res.get('imdbID', '') }}">
                                 <input type="hidden" name="choice_tmdbID" value="{{ res.get('tmdbID') or res.get('id', '') }}">
                                 <input type="hidden" name="choice_plot" value="{{ res.get('Plot', '') }}">
-                                <div class="d-grid gap-2">
+                                <div class="d-flex flex-column">
                                     <button class="btn btn-sm btn-outline-primary" type="submit" name="select_feature" value="A">Choose as Feature A</button>
                                     <button class="btn btn-sm btn-outline-primary" type="submit" name="select_feature" value="B">Choose as Feature B</button>
                                 </div>
