@@ -33,6 +33,8 @@ def logs():
     mode = request.args['mode']
     logfile = request.args['logfile']
     source = "progress" if request.args.get("source") == "progress" else ""
+    if source == "progress" and not re.fullmatch(r"\d+\.log", logfile):
+        raise ValidationError("Invalid MakeMKV progress log")
     session["page_title"] = "Logs"
 
     return render_template('logview.html', file=logfile, mode=mode, source=source)
