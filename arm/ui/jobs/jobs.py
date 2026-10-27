@@ -59,9 +59,39 @@ def _metadata_query_args(values):
             for field in _DISC_METADATA_FIELDS}
 
 
-def _save_disc_metadata(job, values):
+def _special_features_values(job, params=None, media_type=None, metadata_values=None):
+    """Resolve automatic Disc 2 special-feature selection or an explicit user override."""
+    params = params or {}
+    auto_value = params.get("special_features_auto")
+    if auto_value is None:
+        automatic = bool(getattr(job, "special_features_auto", True))
+    else:
+        automatic = str(auto_value).strip().lower() not in ("0", "false", "no", "off")
+    feature_value = params.get("special_features")
+    if feature_value is None:
+        selected = bool(getattr(job, "special_features", False))
+    else:
+        selected = str(feature_value).strip().lower() in ("1", "true", "yes", "on")
+
+    if metadata_values is None:
+        metadata_values = _disc_metadata_values(job, params)
+    disc_number = metadata_values.get("disc_number")
+    normalized_type = str(media_type or getattr(job, "video_type", "") or "").strip().lower()
+    is_movie = normalized_type == "movie"
+    known_non_movie = normalized_type not in ("", "movie", "unknown", "none", "not identified")
+    if automatic:
+        selected = is_movie and disc_number == 2
+    if known_non_movie:
+        selected = False
+    return {"special_features": bool(selected), "special_features_auto": bool(automatic)}
+
+
+def _save_disc_metadata(job, values, feature_values=None):
     for field in _DISC_METADATA_FIELDS:
         setattr(job, field, values.get(field))
+    if feature_values is not None:
+        job.special_features = bool(feature_values.get("special_features", False))
+        job.special_features_auto = bool(feature_values.get("special_features_auto", True))
 
 
 def _label_title_year(job):
@@ -174,16 +204,19 @@ def title_search():
     form = TitleSearchForm(request.args)
     suggested_title, suggested_year = _label_title_year(job)
     metadata_values = _disc_metadata_values(job, request.args)
+    media_type = request.args.get("type") or job.video_type
+    feature_values = _special_features_values(job, request.args, media_type, metadata_values)
     if form.validate():
         title = request.args.get("title", "").strip()
         year = request.args.get("year", "").strip()
         return redirect(url_for(
             "route_jobs.list_titles", title=title, year=year, job_id=job_id,
-            **_metadata_query_args(metadata_values), metadata_controls="1"
+            **_metadata_query_args(metadata_values), **feature_values, type=media_type,
+            metadata_controls="1"
         ))
     return render_template("titlesearch.html", title="Search metadata", form=form, job=job,
                            suggested_title=suggested_title, suggested_year=suggested_year,
-                           **metadata_values)
+                           media_type=media_type, **metadata_values, **feature_values)
 
 
 @route_jobs.route('/customTitle')
@@ -198,6 +231,8 @@ def customtitle():
     form = TitleSearchForm(obj=job)
     suggested_title, suggested_year = _label_title_year(job)
     metadata_values = _disc_metadata_values(job, request.args)
+    media_type = request.args.get("type") or job.video_type
+    feature_values = _special_features_values(job, request.args, media_type, metadata_values)
     title = request.args.get("title", "").strip()
     if title:
         old_title, old_year = job.title, job.year
@@ -210,13 +245,17 @@ def customtitle():
             new_title, new_year,
             request.args.get("imdbID") or (job.imdb_id if same_title else None),
             request.args.get("tmdbID") or (job.tmdb_id if same_title else None),
-            request.args.get("type") or job.video_type
+            media_type
         )
-        _save_disc_metadata(job, metadata_values)
-        ui_utils.database_updater({
+        _save_disc_metadata(job, metadata_values, feature_values)
+        update_values = {
             "title": new_title, "title_manual": new_title, "year": new_year, "year_manual": new_year,
-            "imdb_id": imdb_id, "imdb_id_manual": imdb_id, "tmdb_id": tmdb_id, "hasnicetitle": True,
-        }, job)
+            "imdb_id": imdb_id, "imdb_id_manual": imdb_id, "tmdb_id": tmdb_id,
+            "hasnicetitle": True, "special_features": feature_values["special_features"],
+        }
+        if request.args.get("type"):
+            update_values.update({"video_type": media_type, "video_type_manual": media_type})
+        ui_utils.database_updater(update_values, job)
         db.session.add(Notifications(
             f"Job: {job.job_id} was updated",
             f"Title: {old_title} ({old_year}) was updated to {new_title} ({new_year})"
@@ -226,7 +265,7 @@ def customtitle():
         return redirect(url_for("home"))
     return render_template("customTitle.html", title="Change Title", form=form, job=job,
                            suggested_title=suggested_title, suggested_year=suggested_year,
-                           **metadata_values)
+                           media_type=media_type, **metadata_values, **feature_values)
 
 
 @route_jobs.route('/gettitle')
@@ -253,8 +292,11 @@ def gettitle():
     if not details:
         flash("Could not retrieve metadata for the selected title", "danger")
         return redirect(url_for("route_jobs.title_search", job_id=job_id))
+    metadata_values = _disc_metadata_values(job, request.args)
+    media_type = details.get("Type") or request.args.get("type") or job.video_type
+    feature_values = _special_features_values(job, request.args, media_type, metadata_values)
     return render_template("showtitle.html", results=details, job_id=job_id,
-                           **_disc_metadata_values(job, request.args))
+                           media_type=media_type, **metadata_values, **feature_values)
 
 
 @route_jobs.route('/updatetitle')
@@ -283,7 +325,9 @@ def updatetitle():
     job.tmdb_id = tmdb_id
     job.poster_url = job.poster_url_manual = request.args.get("poster")
     job.hasnicetitle = True
-    _save_disc_metadata(job, _disc_metadata_values(job, request.args))
+    metadata_values = _disc_metadata_values(job, request.args)
+    feature_values = _special_features_values(job, request.args, media_type, metadata_values)
+    _save_disc_metadata(job, metadata_values, feature_values)
     db.session.add(Notifications(
         f"Job: {job.job_id} was updated",
         f"Title: {old_title} ({old_year}) was updated to {new_title} ({new_year})"
@@ -331,6 +375,8 @@ def list_titles():
         raise ValidationError("Job not found")
     form = TitleSearchForm(obj=job)
     metadata_values = _disc_metadata_values(job, request.args)
+    media_type = request.args.get("type") or job.video_type
+    feature_values = _special_features_values(job, request.args, media_type, metadata_values)
     search_results = ui_utils.metadata_selector("search", title, year)
     if search_results is None or "Error" in search_results or (
             "Search" in search_results and not search_results["Search"]):
@@ -344,4 +390,4 @@ def list_titles():
     return render_template("list_titles.html", results=search_results, job_id=job_id, form=form,
                            title=title or suggested_title, year=year or suggested_year,
                            suggested_title=suggested_title, suggested_year=suggested_year,
-                           **metadata_values)
+                           media_type=media_type, **metadata_values, **feature_values)

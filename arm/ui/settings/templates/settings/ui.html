@@ -110,6 +110,44 @@
                          height="35px" alt="More info">
                 </a>
             </div>
+            <div class="card mt-4 arm-job-display-settings">
+                <div class="card-header">Active Job Card Display</div>
+                <div class="card-body">
+                    <p class="text-muted">Choose which technical details appear on active ripping cards.</p>
+                    <div class="custom-control custom-checkbox mb-2">
+                        <input id="show_job_ripper" class="custom-control-input" type="checkbox"
+                               name="show_job_ripper" {% if ui_settings.show_job_ripper %}checked{% endif %}>
+                        <label class="custom-control-label" for="show_job_ripper">Show Ripper</label>
+                    </div>
+                    <div class="custom-control custom-checkbox mb-2">
+                        <input id="show_job_rip_method" class="custom-control-input" type="checkbox"
+                               name="show_job_rip_method" {% if ui_settings.show_job_rip_method %}checked{% endif %}>
+                        <label class="custom-control-label" for="show_job_rip_method">Show Rip Method</label>
+                    </div>
+                    <div class="custom-control custom-checkbox mb-2">
+                        <input id="show_job_main_feature" class="custom-control-input" type="checkbox"
+                               name="show_job_main_feature" {% if ui_settings.show_job_main_feature %}checked{% endif %}>
+                        <label class="custom-control-label" for="show_job_main_feature">Show Main Feature</label>
+                    </div>
+                    <div class="custom-control custom-checkbox mb-2">
+                        <input id="show_job_min_length" class="custom-control-input" type="checkbox"
+                               name="show_job_min_length" {% if ui_settings.show_job_min_length %}checked{% endif %}>
+                        <label class="custom-control-label" for="show_job_min_length">Show Minimum Length</label>
+                    </div>
+                    <div class="custom-control custom-checkbox mb-3">
+                        <input id="show_job_max_length" class="custom-control-input" type="checkbox"
+                               name="show_job_max_length" {% if ui_settings.show_job_max_length %}checked{% endif %}>
+                        <label class="custom-control-label" for="show_job_max_length">Show Maximum Length</label>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label for="device_display_mode">Device name shown on job cards</label>
+                        <select class="form-control" id="device_display_mode" name="device_display_mode">
+                            <option value="coded" {% if ui_settings.device_display_mode != 'display' %}selected{% endif %}>Device path (e.g. /dev/sr0)</option>
+                            <option value="display" {% if ui_settings.device_display_mode == 'display' %}selected{% endif %}>Configured drive name</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
             <button id="uiSubmit" class="btn btn-secondary btn-lg btn-block" form="uiSettings"
                     type="submit">
                 Submit

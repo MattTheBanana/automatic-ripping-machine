@@ -18,7 +18,9 @@ from arm.models.config import Config
 from arm.models.job import Job, JobState, JOB_STATUS_FINISHED
 from arm.models.notifications import Notifications
 from arm.models.track import Track
+from arm.models.system_drives import SystemDrives
 from arm.models.ui_settings import UISettings
+from arm.media_metadata import detect_disc_metadata
 from arm.ui import app, db
 from arm.ui.forms import ChangeParamsForm
 from arm.ui.utils import job_id_validator, database_updater, authenticated_state
@@ -30,6 +32,49 @@ def get_notifications():
     all_notification = Notifications.query.filter_by(seen=False)
     notification = [a.get_d() for a in all_notification]
     return notification
+
+
+def _enrich_job_card_data(job, result, card_settings):
+    """Add the normalized metadata and display values used by active job cards."""
+    detected_metadata = detect_disc_metadata(job.label, job.title, job.title_auto)
+    for field in ("season_number", "disc_number", "episode_start", "episode_end"):
+        stored_value = getattr(job, field, None)
+        result[field] = stored_value if stored_value is not None else detected_metadata.get(field)
+
+    auto_features = bool(getattr(job, "special_features_auto", True))
+    special_features = bool(getattr(job, "special_features", False))
+    if auto_features:
+        disc_number = result["disc_number"]
+        try:
+            disc_number = int(disc_number)
+        except (TypeError, ValueError):
+            disc_number = None
+        special_features = (
+            str(getattr(job, "video_type", "") or "").strip().lower() == "movie"
+            and disc_number == 2
+        )
+    result["special_features"] = special_features
+    result["special_features_auto"] = auto_features
+
+    elapsed_end = job.stop_time or datetime.datetime.now()
+    if job.start_time is not None:
+        result["elapsed_seconds"] = max(
+            0, int((elapsed_end - job.start_time).total_seconds())
+        )
+    else:
+        result["elapsed_seconds"] = None
+
+    display_device = str(job.devpath or "")
+    if card_settings["device_display_mode"] == "display" and display_device:
+        try:
+            drive = SystemDrives.query.filter_by(mount=job.devpath).first()
+            if drive:
+                display_device = str(drive.name or drive.description or display_device).strip()
+        except Exception:
+            app.logger.debug(
+                "Could not resolve display name for device %s", job.devpath, exc_info=True
+            )
+    result["display_device"] = display_device
 
 
 def get_x_jobs(job_status):
@@ -48,6 +93,15 @@ def get_x_jobs(job_status):
     else:
         raise ValueError(f"{job_status} is not a valid option")
 
+    ui_config = UISettings.query.get(1)
+    card_settings = {
+        "show_job_ripper": bool(getattr(ui_config, "show_job_ripper", True)),
+        "show_job_rip_method": bool(getattr(ui_config, "show_job_rip_method", True)),
+        "show_job_main_feature": bool(getattr(ui_config, "show_job_main_feature", True)),
+        "show_job_min_length": bool(getattr(ui_config, "show_job_min_length", True)),
+        "show_job_max_length": bool(getattr(ui_config, "show_job_max_length", True)),
+        "device_display_mode": getattr(ui_config, "device_display_mode", "coded") or "coded",
+    }
     job_results = {}
     i = 0
     for j in jobs:
@@ -63,6 +117,8 @@ def get_x_jobs(job_status):
         for key, value in j.get_d().items():
             if key != "config":
                 job_results[i][str(key)] = str(value)
+
+        _enrich_job_card_data(j, job_results[i], card_settings)
         i += 1
     if jobs:
         app.logger.debug("jobs  - we have " + str(len(job_results)) + " jobs")

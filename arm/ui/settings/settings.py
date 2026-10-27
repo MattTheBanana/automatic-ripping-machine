@@ -374,6 +374,12 @@ def save_ui_settings():
         arm_ui_cfg.language = format(form.language.data)
         arm_ui_cfg.database_limit = format(form.database_limit.data)
         arm_ui_cfg.notify_refresh = format(form.notify_refresh.data)
+        arm_ui_cfg.show_job_ripper = bool(form.show_job_ripper.data)
+        arm_ui_cfg.show_job_rip_method = bool(form.show_job_rip_method.data)
+        arm_ui_cfg.show_job_main_feature = bool(form.show_job_main_feature.data)
+        arm_ui_cfg.show_job_min_length = bool(form.show_job_min_length.data)
+        arm_ui_cfg.show_job_max_length = bool(form.show_job_max_length.data)
+        arm_ui_cfg.device_display_mode = form.device_display_mode.data or "coded"
         db.session.commit()
         success = True
     # Masking the jinja update, otherwise an error is thrown

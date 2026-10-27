@@ -1,0 +1,91 @@
+<div class="arm-special-feature-control" {% if media_type and media_type|lower not in ("movie", "unknown", "none") %}hidden{% endif %}>
+    <input type="hidden" name="special_features" id="special_features"
+           value="{{ '1' if special_features else '0' }}">
+    <input type="hidden" name="special_features_auto" id="special_features_auto"
+           value="{{ '1' if special_features_auto else '0' }}">
+    <div class="d-flex flex-wrap align-items-center">
+        <button type="button" id="toggle-special-features"
+                class="btn {{ 'btn-primary' if special_features else 'btn-outline-primary' }} mr-2 mb-2"
+                aria-pressed="{{ 'true' if special_features else 'false' }}">
+            <span aria-hidden="true">✦</span> Special Features: {{ 'On' if special_features else 'Off' }}
+        </button>
+        <button type="button" id="auto-special-features" class="btn btn-sm btn-outline-secondary mb-2">
+            Auto-select Disc 2
+        </button>
+    </div>
+    <small id="special-features-hint" class="form-text text-muted">
+        {% if special_features_auto %}Automatically selected for movie discs numbered 2 when the title is identified as a movie.{% else %}Manual selection; automatic Disc 2 selection is paused.{% endif %}
+    </small>
+</div>
+<script>
+(function () {
+    const toggle = document.getElementById("toggle-special-features");
+    const automaticButton = document.getElementById("auto-special-features");
+    const selectedInput = document.getElementById("special_features");
+    const automaticInput = document.getElementById("special_features_auto");
+    const discInput = document.getElementById("disc_number");
+    const hint = document.getElementById("special-features-hint");
+    if (!toggle || !automaticButton || !selectedInput || !automaticInput) return;
+
+    const mediaType = {{ media_type|default('', true)|tojson }};
+    const initialDisc = {{ disc_number or 0 }};
+
+    function setSelected(selected) {
+        const normalizedType = String(mediaType || "").trim().toLowerCase();
+        const knownNonMovie = normalizedType && !["movie", "unknown", "none"].includes(normalizedType);
+        const isSelected = Boolean(selected) && !knownNonMovie;
+        selectedInput.value = isSelected ? "1" : "0";
+        toggle.setAttribute("aria-pressed", String(isSelected));
+        toggle.classList.toggle("btn-primary", isSelected);
+        toggle.classList.toggle("btn-outline-primary", !isSelected);
+        toggle.innerHTML = '<span aria-hidden="true">✦</span> Special Features: ' + (isSelected ? "On" : "Off");
+        syncLinks();
+    }
+
+    function syncLinks() {
+        document.querySelectorAll("[data-special-features-link]").forEach(function (link) {
+            try {
+                const url = new URL(link.href, window.location.href);
+                url.searchParams.set("special_features", selectedInput.value);
+                url.searchParams.set("special_features_auto", automaticInput.value);
+                link.href = url.toString();
+            } catch (error) {
+                // Leave the existing link untouched if URL parsing is unavailable.
+            }
+        });
+    }
+
+    function selectAutomatically() {
+        if (automaticInput.value !== "1") return;
+        const rawDisc = discInput ? discInput.value : initialDisc;
+        const disc = parseInt(rawDisc || "0", 10);
+        setSelected(String(mediaType || "").toLowerCase() === "movie" && disc === 2);
+        if (hint) {
+            hint.textContent = "Automatically selected for movie discs numbered 2 when the title is identified as a movie.";
+        }
+    }
+
+    toggle.addEventListener("click", function () {
+        automaticInput.value = "0";
+        setSelected(selectedInput.value !== "1");
+        if (hint) hint.textContent = "Manual selection; automatic Disc 2 selection is paused.";
+    });
+
+    automaticButton.addEventListener("click", function () {
+        automaticInput.value = "1";
+        selectAutomatically();
+    });
+
+    if (discInput) {
+        discInput.addEventListener("input", selectAutomatically);
+        discInput.addEventListener("change", selectAutomatically);
+        document.querySelectorAll('[data-set-target="disc_number"], [data-step-target="disc_number"]').forEach(function (button) {
+            button.addEventListener("click", function () {
+                window.setTimeout(selectAutomatically, 0);
+            });
+        });
+    }
+    selectAutomatically();
+    syncLinks();
+})();
+</script>

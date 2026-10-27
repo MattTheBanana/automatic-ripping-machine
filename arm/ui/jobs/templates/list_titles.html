@@ -26,13 +26,15 @@
             {% if res.get("Type", "").lower() in ("movie", "series") %}
                 <div class="col-12 col-sm-6 col-lg-3 mb-3">
                     <div class="card h-100 text-center">
-                        <a class="card-header" href="{{ url_for('route_jobs.gettitle',
+                        <a class="card-header" data-special-features-link href="{{ url_for('route_jobs.gettitle',
                             imdbID=res.get('imdbID', ''), tmdbID=res.get('tmdbID') or res.get('id', ''),
                             type=res.get('Type', 'movie'), job_id=job_id,
                             season_number=season_number if season_number is not none else '',
                             disc_number=disc_number if disc_number is not none else '',
                             episode_start=episode_start if episode_start is not none else '',
                             episode_end=episode_end if episode_end is not none else '',
+                            special_features='1' if special_features else '0',
+                            special_features_auto='1' if special_features_auto else '0',
                             metadata_controls='1') }}">
                             {% if res.get("Poster") %}<img src="{{ res['Poster'] }}" class="img-fluid arm-search-poster" alt="Poster for {{ res.get('Title', 'media') }}">{% else %}<span class="text-muted">No poster</span>{% endif %}
                         </a>
