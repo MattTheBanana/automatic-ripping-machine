@@ -53,8 +53,8 @@ class DriveSleepWatchdog(threading.Thread):
     """Alert when an optical-drive read appears stalled for an extended period.
 
     Linux does not provide a consistent optical-drive sleep indicator. While ARM
-    is actively reading from a DVD/Blu-ray, this watchdog instead watches the
-    job and MakeMKV progress logs for a prolonged lack of activity.
+    is actively reading an optical disc, this watchdog watches the live tray state
+    and source-progress logs for an open tray or a prolonged lack of activity.
     """
     DEFAULT_CHECK_INTERVAL_SECONDS = 5
     DEFAULT_STALL_TIMEOUT_SECONDS = 600
