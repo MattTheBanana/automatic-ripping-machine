@@ -58,7 +58,7 @@ $(document).ready(function () {
  * @param    {Class} job    current job
  * @param    {Class} oldJob    Copy of old job
  */
-function updateProgress(job, oldJob) {
+function updateProgress(job) {
     const details = document.getElementById(`jobId${job.job_id}_progress_details`);
     if (!details) return;
     const isMakeMKV = job.status === "ripping" && job.progress_kind === "makemkv";
@@ -74,7 +74,7 @@ function updateProgress(job, oldJob) {
         if (currentTitle) currentTitle.textContent = job.current_title || "Current title";
         if (totalTitle) totalTitle.textContent = job.total_progress_title || "Total disc progress";
         setProgressBar(job.job_id, "current_title_progress",
-            job.current_title_progress_round ?? job.progress_round);
+            job.current_title_progress_round !== undefined ? job.current_title_progress_round : job.progress_round);
         setProgressBar(job.job_id, "total_progress", job.total_progress_round);
         updateContents($(`#jobId${job.job_id}_eta`), job, "ETA for current title", job.eta || "Unknown");
     } else if (checkTranscodeStatus(job)) {
@@ -183,7 +183,7 @@ function updateJobItem(oldJob, job) {
         elapsedNode.dataset.running = String(!["success", "fail"].includes(String(job.status || "").toLowerCase()));
         elapsedNode.textContent = formatElapsedSeconds(elapsedNode.dataset.elapsedSeconds);
     }
-    updateProgress(job, oldJob);
+    updateProgress(job);
     // Reapply current UI preferences on every refresh so cards already ripping
     // respond immediately when visibility or device-name preferences change.
     const cardSettings = job.card_settings && typeof job.card_settings === "object"
