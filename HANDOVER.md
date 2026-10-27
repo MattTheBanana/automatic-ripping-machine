@@ -110,3 +110,11 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 - The post-merge Quality Checks, ShellCheck, and `Build and publish custom ARM` workflow all succeeded for main commit `fc56a5a22ba998c3bae1526d93a48edd1c6894fb`. The custom image workflow publishes `latest`, `2.24.4`, and `makemkv-2.0.0`; these names currently point to the same built image for each successful main push.
 - The user's TrueNAS app is a Compose-based Custom App using `ghcr.io/mattthebanana/arm-custom:makemkv-2.0.0`. If ARM General Info still shows `e5672a1` after the successful `fc56a5a` build, inspect the container's actual image ID/digest and whether TrueNAS pulled/recreated the workload. A fixed tag can point to a new digest without its text changing. The TrueNAS catalog `Revision` isn't set by this Compose YAML.
 - Next useful improvement: publish an immutable per-commit image tag (for example, `git-<short-sha>`) alongside `latest`, the VERSION tag, and the legacy tag. Then TrueNAS deployments can select a specific build and the displayed image reference makes rollouts unambiguous. Check the current TrueNAS app's pull/redeploy behavior before adding `pull_policy: always`.
+
+
+## Notification drawer email preferences (2026-10-27)
+
+- The notification slide-out drawer includes persistent switches for email notifications overall, errors, successful completion, and other events. The “other events” category is present because ARM also emits informational events such as disc detection and job-start notifications.
+- Defaults are declared in `setup/arm.yaml`; descriptions are in `arm/ui/comments.json`. The drawer saves changes through the authenticated, CSRF-protected `/notificationpreferences` endpoint.
+- Email category filtering is applied in `arm/ripper/utils.py` before SMTP/Gmail delivery. Local database notifications, Apprise, and post-processing scripts are unchanged by these email-only preferences. Error wording takes precedence over completion wording when a message mentions both.
+- Focused categorization tests are in `test/unittest/test_notification_preferences.py`. Run them with `PYTHONPATH=. pytest -q test/unittest/test_notification_preferences.py`; this change has not been run in a project test environment yet.
