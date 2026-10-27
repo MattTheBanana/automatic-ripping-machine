@@ -289,6 +289,37 @@ class DriveSleepWatchdog(threading.Thread):
             self.join(timeout=self.check_interval_seconds + 5)
 
 
+def detect_open_tray_abort(job):
+    """Return and record a cancellation reason if a failed physical read left its tray open."""
+    existing_reason = getattr(job, "_arm_abort_reason", None)
+    if existing_reason:
+        return existing_reason
+    if getattr(job, "ejected", False):
+        return None
+
+    devpath = str(getattr(job, "devpath", "") or "unknown drive")
+    try:
+        drive = getattr(job, "drive", None)
+        if drive is None:
+            drive = SystemDrives.query.filter_by(mount=devpath).first()
+        if drive is None:
+            return None
+        drive.tray_status()
+        if not drive.open:
+            return None
+    except Exception:
+        logging.debug("Unable to confirm tray state after read failure on %s", devpath, exc_info=True)
+        return None
+
+    reason = (
+        f"Optical drive tray was opened during an active disc read on {devpath}. "
+        "The read was cancelled; close the tray and start a new rip."
+    )
+    job._arm_abort_reason = reason
+    logging.error("%s", reason)
+    return reason
+
+
 def format_failure_notification(context, error, logfile="arm.log", setup=False, outcome="Job failed"):
     """Build a concise failure message and retain a safe, UI-actionable log reference."""
     context = " ".join(str(context or "unknown disc").split())[:64]
@@ -832,7 +863,7 @@ def rip_music(job, logfile):
             database_updater(args, job)
             return True
         except subprocess.CalledProcessError as ab_error:
-            abort_reason = getattr(job, "_arm_abort_reason", None)
+            abort_reason = detect_open_tray_abort(job)
             if abort_reason:
                 raise RipperException(abort_reason) from ab_error
             err = f"Call to abcde failed with code: {ab_error.returncode} ({ab_error.output})"
@@ -878,7 +909,7 @@ def rip_data(job):
         logging.info("Data rip call successful")
         success = True
     except subprocess.CalledProcessError as dd_error:
-        abort_reason = getattr(job, "_arm_abort_reason", None)
+        abort_reason = detect_open_tray_abort(job)
         if abort_reason:
             try:
                 shutil.rmtree(raw_path)
