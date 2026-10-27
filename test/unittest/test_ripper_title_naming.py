@@ -325,6 +325,20 @@ class TestDriveSleepWatchdog(unittest.TestCase):
         self.assertFalse(watchdog._poll_once(now=1000))
         self.assertTrue(watchdog._is_reading_from_drive())
 
+    def test_data_disc_is_monitored_only_while_copy_job_is_active(self):
+        watchdog, job, _snapshot = self.make_watchdog(
+            status="active", disctype="data", timeout=10
+        )
+        self.assertTrue(watchdog._is_reading_from_drive())
+        job.ejected = True
+        self.assertFalse(watchdog._is_reading_from_drive())
+
+    def test_expected_auto_eject_disables_tray_open_cancellation(self):
+        watchdog, job, _snapshot = self.make_watchdog(status="ripping", timeout=10)
+        self.assertTrue(watchdog._is_reading_from_drive())
+        job.ejected = True
+        self.assertFalse(watchdog._is_reading_from_drive())
+
     def test_open_tray_terminates_active_reader_and_records_cancel_reason(self):
         watchdog, job, _snapshot = self.make_watchdog(status="ripping", timeout=10)
         job.pid = 12345
