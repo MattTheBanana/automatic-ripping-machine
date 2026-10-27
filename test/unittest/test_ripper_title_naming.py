@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import arm.ripper.utils as ripper_utils
+from arm.api.json_api import parse_makemkv_progress
 from arm.ripper.arm_ripper import _apply_disc_feature_defaults
 
 from arm.ripper.utils import clean_for_filename, fix_job_title
@@ -170,6 +171,41 @@ class TestMediaFolderNaming(unittest.TestCase):
         job = self.make_job("not identified", year="0000", folder_id_type="none")
         job.label = "not identified"
         self.assertEqual(fix_job_title(job), "Unknown Title")
+
+
+class TestMakeMKVProgressParsing(unittest.TestCase):
+    def test_parses_current_title_and_total_progress_separately(self):
+        lines = [
+            'PRGT:5020,0,"Saving all titles"',
+            'PRGC:5018,0,"Saving title 2 of 4"',
+            "PRGV:32768,16384,65536",
+            "PRGV:39321,19660,65536",
+        ]
+        result = parse_makemkv_progress(lines)
+        self.assertEqual(result["current_title"], "Saving title 2 of 4")
+        self.assertEqual(result["total_title"], "Saving all titles")
+        self.assertEqual(result["current_title_code"], "5018")
+        self.assertAlmostEqual(result["current_title_progress"], 60.0, places=1)
+        self.assertAlmostEqual(result["total_progress"], 30.0, places=1)
+        self.assertTrue(result["has_progress_values"])
+
+    def test_accepts_small_values_and_escaped_title_text(self):
+        result = parse_makemkv_progress([
+            'PRGC:5001,0,"Saving \\"Special title\\""',
+            "PRGV:1,2,4",
+        ])
+        self.assertEqual(result["current_title"], 'Saving "Special title"')
+        self.assertAlmostEqual(result["current_title_progress"], 25.0)
+        self.assertAlmostEqual(result["total_progress"], 50.0)
+
+    def test_missing_or_invalid_progress_values_return_zero_percent(self):
+        result = parse_makemkv_progress([
+            'PRGT:5020,0,"Saving all titles"',
+            "PRGV:0,0,0",
+        ])
+        self.assertFalse(result["has_progress_values"])
+        self.assertEqual(result["current_title_progress"], 0.0)
+        self.assertEqual(result["total_progress"], 0.0)
 
 
 class TestDriveSleepWatchdog(unittest.TestCase):
