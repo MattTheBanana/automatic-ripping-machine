@@ -4,7 +4,7 @@ import json
 import re
 import requests
 
-from arm.media_metadata import title_search_variants
+from arm.media_metadata import is_generic_disc_title, title_search_variants
 from flask.logging import default_handler  # noqa: F401
 
 from arm.ui import app
@@ -32,6 +32,9 @@ def call_omdb_api(title=None, year=None, imdb_id=None, plot="short"):
 
     if not title:
         app.logger.debug("no params")
+        return None
+    if is_generic_disc_title(title):
+        app.logger.info("Skipping OMDb lookup for generic disc label: %s", title)
         return None
 
     urls = []
@@ -80,6 +83,9 @@ def get_omdb_poster(title=None, year=None, imdb_id=None, plot="short"):
     :param plot: short or full plot
     :return: [poster_link, imdb_id]
     """
+    if not imdb_id and is_generic_disc_title(title):
+        app.logger.info("Skipping OMDb poster lookup for generic disc label: %s", title)
+        return None, None
     omdb_api_key = cfg.arm_config['OMDB_API_KEY']
     if imdb_id:
         str_url = f"https://www.omdbapi.com/?i={imdb_id}&plot={plot}&r=json&apikey={omdb_api_key}"
@@ -119,6 +125,9 @@ def get_tmdb_poster(search_query=None, year=None):
     :param year: year of movie/show
     :return: dict of search results
     """
+    if is_generic_disc_title(search_query):
+        app.logger.info("Skipping TMDB poster lookup for generic disc label: %s", search_query)
+        return None
     tmdb_api_key = cfg.arm_config['TMDB_API_KEY']
     search_results, poster_base, response = tmdb_fetch_results(search_query, year, tmdb_api_key)
 
@@ -164,6 +173,9 @@ def tmdb_process_poster(search_results, poster_base):
 
 def tmdb_search(search_query=None, year=None):
     """Search TMDB movies and TV, combining joined-word title variants."""
+    if is_generic_disc_title(search_query):
+        app.logger.info("Skipping TMDB search for generic disc label: %s", search_query)
+        return None
     key = cfg.arm_config["TMDB_API_KEY"]
     poster_base = "https://image.tmdb.org/t/p/original"
     combined, seen = [], set()
@@ -318,6 +330,8 @@ def tmdb_fetch_results(search_query, year, tmdb_api_key):
     # https://api.themoviedb.org/3/movie/78?api_key= # base url
     # Additional
     # &append_to_response=alternative_titles,changes,credits,images,keywords,lists,releases,reviews,similar,videos
+    if is_generic_disc_title(search_query):
+        return {"results": [], "total_results": 0}, "https://image.tmdb.org/t/p/original", None
     if year:
         url = f"https://api.themoviedb.org/3/search/movie?api_key={tmdb_api_key}&query={search_query}&year={year}"
     else:
