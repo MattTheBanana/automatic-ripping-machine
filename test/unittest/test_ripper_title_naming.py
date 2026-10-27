@@ -5,6 +5,7 @@ from unittest.mock import patch
 import arm.ripper.utils as ripper_utils
 from arm.api.json_api import parse_makemkv_progress
 from arm.ripper.arm_ripper import _apply_disc_feature_defaults
+from arm.models.job import Job
 
 from arm.ripper.utils import (
     clean_for_filename, fix_job_title, format_failure_notification, DuplicateRunException
@@ -241,6 +242,25 @@ class TestFailureNotificationFormatting(unittest.TestCase):
         )
         self.assertIn("Job cancelled for SHARK_BOY_AND_LAVA_GIRL", message)
         self.assertTrue(message.endswith("[View log: shark-boy.log]"))
+
+
+class TestCancelledJobCleanup(unittest.TestCase):
+    def test_cancelled_read_releases_job_without_toggling_tray(self):
+        drive = SimpleNamespace(
+            release_current_job=unittest.mock.Mock(),
+            tray_status=unittest.mock.Mock(),
+            eject=unittest.mock.Mock(),
+        )
+        job = SimpleNamespace(
+            ejected=False,
+            drive=drive,
+            devpath="/dev/sr0",
+            _arm_abort_reason="The tray was opened during reading.",
+        )
+        Job.eject(job)
+        drive.release_current_job.assert_called_once_with()
+        drive.tray_status.assert_not_called()
+        drive.eject.assert_not_called()
 
 
 class TestDuplicateRunGuard(unittest.TestCase):
