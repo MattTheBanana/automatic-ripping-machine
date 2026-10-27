@@ -144,6 +144,17 @@ class Job(db.Model):
     poster_url = db.Column(db.String(256))
     poster_url_auto = db.Column(db.String(256))
     poster_url_manual = db.Column(db.String(256))
+    # Feature A uses the existing title fields; these describe Feature B on a
+    # double-feature disc. Plot is stored for symmetric metadata previews.
+    plot = db.Column(db.Text)
+    secondary_title = db.Column(db.String(256))
+    secondary_year = db.Column(db.String(4))
+    secondary_video_type = db.Column(db.String(20))
+    secondary_imdb_id = db.Column(db.String(15))
+    secondary_tmdb_id = db.Column(db.String(20))
+    secondary_poster_url = db.Column(db.String(512))
+    secondary_plot = db.Column(db.Text)
+    disc_side = db.Column(db.String(1))
     devpath = db.Column(db.String(15))
     mountpoint = db.Column(db.String(20))
     hasnicetitle = db.Column(db.Boolean)
