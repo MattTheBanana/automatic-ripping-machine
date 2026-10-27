@@ -255,29 +255,33 @@ if __name__ == "__main__":
         setup()
         main()
     except Exception as error:
-        logging.critical("A fatal error has occurred and ARM is exiting.")
+        arm_logger = logging.getLogger("ARM")
+        arm_logger.critical("A fatal error has occurred and ARM is exiting.")
         print_stacktrace = (
-            logging.getLogger().getEffectiveLevel() == logging.DEBUG
+            arm_logger.getEffectiveLevel() == logging.DEBUG
             or not isinstance(error, utils.RipperException)
         )
-        logging.critical(error, exc_info=(error if print_stacktrace else None),)
+        arm_logger.critical("%s", error, exc_info=(error if print_stacktrace else None))
 
         if job:
-            utils.notify(
-                job,
-                constants.NOTIFY_TITLE,
-                f"ARM encountered a fatal error processing {job.title}. "
-                f"Check the logs for more details. {error}"
+            disc_context = job.title or job.label or job.devpath or f"Job {job.job_id}"
+            notification_title = f"ARM job failed: {disc_context}"[:256]
+            notification_body = utils.format_failure_notification(
+                disc_context, error, job.logfile or "arm.log"
             )
+            utils.notify(job, notification_title, notification_body)
             job.status = JobState.FAILURE.value
             job.errors = str(error)
         else:
-            utils.notify(
-                None,
-                constants.NOTIFY_TITLE,
-                f"ARM encountered a fatal error during job setup. "
-                f"Check the logs for more details. {error}"
+            device_path = (
+                f"/dev/{args.devpath}" if args and getattr(args, "devpath", None)
+                else "unknown drive"
             )
+            notification_title = f"ARM job setup failed: {device_path}"[:256]
+            notification_body = utils.format_failure_notification(
+                device_path, error, "arm.log", setup=True
+            )
+            utils.notify(None, notification_title, notification_body)
         # Possibly add cleanup section here for failed job files
     else:
         if job:
