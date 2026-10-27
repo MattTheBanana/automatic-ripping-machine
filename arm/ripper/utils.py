@@ -12,7 +12,6 @@ import signal
 import threading
 from logging import Logger
 from pathlib import Path, PurePath
-from math import ceil
 
 import bcrypt
 import requests
