@@ -7,6 +7,7 @@ Covers
 """
 
 import os
+import re
 from pathlib import Path
 from flask_login import LoginManager, login_required  # noqa: F401
 from flask import render_template, request, Blueprint, send_file, session
@@ -31,9 +32,10 @@ def logs():
     """
     mode = request.args['mode']
     logfile = request.args['logfile']
+    source = "progress" if request.args.get("source") == "progress" else ""
     session["page_title"] = "Logs"
 
-    return render_template('logview.html', file=logfile, mode=mode)
+    return render_template('logview.html', file=logfile, mode=mode, source=source)
 
 
 @route_logs.route('/listlogs', defaults={'path': ''})
@@ -67,12 +69,19 @@ def logreader():
     """
     log_path = cfg.arm_config['LOGPATH']
     mode = request.args.get('mode')
+    logfile = request.args.get('logfile')
+    source = request.args.get('source')
     session["page_title"] = "Logs"
 
-    # We should use the job id and not get the raw logfile from the user
-    # Maybe search database and see if we can match the logname with a previous rip ?
-    full_path = os.path.join(log_path, request.args.get('logfile'))
-    ui_utils.validate_logfile(request.args.get('logfile'), mode, Path(full_path))
+    # Progress logs live in a separate directory. Only numeric job-id filenames
+    # are allowed here so a client cannot use this mode to read arbitrary files.
+    if source == "progress":
+        if not logfile or not re.fullmatch(r"\d+\.log", logfile):
+            raise ValidationError("Invalid MakeMKV progress log")
+        full_path = os.path.join(log_path, "progress", logfile)
+    else:
+        full_path = os.path.join(log_path, logfile or "")
+    ui_utils.validate_logfile(logfile, mode, Path(full_path))
 
     # Only ARM logs
     if mode == "armcat":
