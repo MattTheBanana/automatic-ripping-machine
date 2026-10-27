@@ -149,22 +149,43 @@ class DriveSleepWatchdog(threading.Thread):
             "The read was cancelled to avoid continuing with the disc unavailable. "
             "Close the tray and start a new rip."
         )
-        # The job object is shared with the main ripper thread; the SIGTERM handler
-        # reads this reason and raises a handled exception to unwind subprocess calls.
+        # Keep the reason on the shared job object so the main ripper thread can
+        # report a cancellation instead of a generic subprocess failure.
         self.job._arm_abort_reason = reason
         logging.error("%s", reason)
         pid = getattr(self.job, "pid", None)
         try:
-            if pid and int(pid) == os.getpid():
-                os.kill(int(pid), signal.SIGTERM)
-            else:
+            if not pid or int(pid) != os.getpid():
                 logging.error(
                     "Unable to cancel job %s on tray-open event: unexpected process id %s",
                     getattr(self.job, "job_id", "unknown"), pid,
                 )
-        except OSError:
+                return
+
+            # Stop the command reading the disc first. Sending SIGTERM only to the
+            # Python parent can leave makemkvcon/HandBrake alive and the drive busy.
+            process = psutil.Process(int(pid))
+            children = process.children(recursive=True)
+            for child in reversed(children):
+                try:
+                    child.terminate()
+                except psutil.NoSuchProcess:
+                    continue
+
+            if children:
+                _gone, still_alive = psutil.wait_procs(children, timeout=2)
+                for child in still_alive:
+                    try:
+                        child.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+            else:
+                # If the open-tray event arrived between commands, interrupt the
+                # main worker so its signal handler can unwind the rip cleanly.
+                os.kill(int(pid), signal.SIGTERM)
+        except (OSError, psutil.Error):
             logging.exception(
-                "Unable to signal job %s after its tray was opened",
+                "Unable to cancel job %s after its tray was opened",
                 getattr(self.job, "job_id", "unknown"),
             )
 
