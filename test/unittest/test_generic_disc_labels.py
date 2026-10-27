@@ -7,8 +7,9 @@ from arm.media_metadata import is_generic_disc_title, parse_media_label, title_s
 class TestGenericDiscLabels(unittest.TestCase):
     def test_common_placeholder_labels_are_not_search_terms(self):
         for label in (
-            "undefined", "video", "DVD", "disc", "disc 1", "Video 2",
-            "DVD_VIDEO", "VIDEO_TS", "not identified", "new volume",
+            "undefined", "video", "DVD", "disc", "disc 1", "Video 2", "CD 1",
+            "DVD_VIDEO", "VIDEO_TS", "not identified", "new volume", "unknown_title",
+            "Untitled Disc",
         ):
             with self.subTest(label=label):
                 self.assertTrue(is_generic_disc_title(label), label)
