@@ -117,21 +117,8 @@ def rip_visual_media(have_dupes, job, logfile, protection):
         try:
             makemkv_out_path = makemkv.makemkv(job)
         except Exception as mkv_error:  # noqa: E722
-            abort_reason = getattr(job, "_arm_abort_reason", None)
-            # MakeMKV can notice a tray-open event and fail before the tray watchdog's
-            # next poll. Preserve that real drive state instead of hiding it in a generic
-            # "Error while running MakeMKV" message.
-            if not abort_reason and job.drive is not None:
-                try:
-                    job.drive.tray_status()
-                    if job.drive.open:
-                        abort_reason = (
-                            f"Optical drive tray was opened during an active disc read on {job.devpath}. "
-                            "The read was cancelled; close the tray and start a new rip."
-                        )
-                        job._arm_abort_reason = abort_reason
-                except Exception:
-                    logging.debug("Could not confirm tray state after MakeMKV failed", exc_info=True)
+            # MakeMKV may detect the open tray before the watchdog's next poll.
+            abort_reason = utils.detect_open_tray_abort(job)
             if abort_reason:
                 raise utils.RipperException(abort_reason) from mkv_error
             raise utils.RipperException("Error while running MakeMKV") from mkv_error
