@@ -15,6 +15,63 @@ if find_spec("arm") is None:
 from arm.ripper import utils, makemkv, handbrake, ffmpeg  # noqa E402
 from arm.ui import app, db, constants  # noqa E402
 from arm.models.job import JobState  # noqa E402
+from arm.media_metadata import detect_disc_metadata  # noqa E402
+
+
+def _apply_disc_feature_defaults(job):
+    """Persist label metadata and automatically select movie Disc 2 special features."""
+    detected = detect_disc_metadata(
+        getattr(job, "label", None),
+        getattr(job, "title", None),
+        getattr(job, "title_auto", None),
+    )
+    for field in ("season_number", "disc_number", "episode_start", "episode_end"):
+        if getattr(job, field, None) is None and detected.get(field) is not None:
+            setattr(job, field, detected[field])
+
+    if getattr(job, "special_features_auto", True):
+        job.special_features = (
+            str(getattr(job, "video_type", "") or "").strip().lower() == "movie"
+            and getattr(job, "disc_number", None) == 2
+        )
+    elif str(getattr(job, "video_type", "") or "").strip().lower() not in ("", "movie", "unknown", "none"):
+        job.special_features = False
+    db.session.commit()
+
+
+def _prepare_output_paths(have_dupes, job, type_sub_folder, job_title):
+    """Build output paths while treating special-feature discs as part of their movie."""
+    is_special_features = (
+        bool(getattr(job, "special_features", False)) and str(job.video_type or "").lower() == "movie"
+    )
+    transcode_out_path = os.path.join(job.config.TRANSCODE_PATH, type_sub_folder, job_title)
+    final_directory = os.path.join(job.config.COMPLETED_PATH, type_sub_folder, job_title)
+    special_marker = os.path.join(final_directory, ".arm-special-features-only")
+
+    if is_special_features:
+        transcode_out_path = os.path.join(
+            job.config.TRANSCODE_PATH, type_sub_folder,
+            f"{job_title} - Special Features - Job {job.job_id}"
+        )
+        utils.make_dir(transcode_out_path)
+        utils.make_dir(final_directory)
+        main_movie_file = os.path.join(
+            final_directory, f"{job_title}.{job.config.DEST_EXT}"
+        )
+        if not os.path.isfile(main_movie_file) and not os.path.exists(special_marker):
+            with open(special_marker, "w", encoding="utf-8") as marker_file:
+                marker_file.write(f"Special-feature disc job {job.job_id} created this directory.\\n")
+    else:
+        # Reuse a directory created by a special-feature disc before the movie disc was ripped.
+        if os.path.isfile(special_marker):
+            logging.info(
+                "Reusing movie directory previously created for special features: %s", final_directory
+            )
+        else:
+            final_directory = utils.check_for_dupe_folder(have_dupes, final_directory, job)
+        transcode_out_path = utils.check_for_dupe_folder(have_dupes, transcode_out_path, job)
+
+    return transcode_out_path, final_directory, is_special_features, special_marker
 
 
 def rip_visual_media(have_dupes, job, logfile, protection):
@@ -27,24 +84,24 @@ def rip_visual_media(have_dupes, job, logfile, protection):
     :param protection: Does the disc have 99 track protection
     :return: None
     """
+    # Keep label metadata available to the UI and select movie Disc 2 automatically.
+    _apply_disc_feature_defaults(job)
+
     # Fix the sub-folder type - (movie|tv|unknown)
     type_sub_folder = utils.convert_job_type(job.video_type)
     # Fix the job title - Title (Year) | Title
     job_title = utils.fix_job_title(job)
 
-    # We need to check/construct the final path, and the transcode path
-    transcode_out_path = os.path.join(job.config.TRANSCODE_PATH, type_sub_folder, job_title)
-    final_directory = os.path.join(job.config.COMPLETED_PATH, type_sub_folder, job_title)
+    # Construct output directories with special-feature discs sharing their movie folder.
+    transcode_out_path, final_directory, is_special_features, special_marker = _prepare_output_paths(
+        have_dupes, job, type_sub_folder, job_title
+    )
 
-    # Check folders for already ripped jobs -> creates folder
-    transcode_out_path = utils.check_for_dupe_folder(have_dupes, transcode_out_path, job)
-    # If dupes rips is disabled this might kill the run
-    final_directory = utils.check_for_dupe_folder(have_dupes, final_directory, job)
-
-    # Update the job.path with the final directory
+    # Update the job.path with the movie directory, not the temporary special-feature output.
     utils.database_updater({'path': final_directory}, job)
-    # Save poster image from disc if enabled
-    utils.save_disc_poster(final_directory, job)
+    # Preserve the main movie poster when processing its special-feature disc.
+    if not is_special_features:
+        utils.save_disc_poster(final_directory, job)
 
     logging.info(f"Processing files to: {transcode_out_path}")
     makemkv_out_path = None
@@ -77,20 +134,36 @@ def rip_visual_media(have_dupes, job, logfile, protection):
         utils.delete_raw_files([transcode_out_path])
         transcode_out_path = transcode_in_path
 
-    # Update final path if user has set a custom/manual title
-    logging.debug(f"Job title status: [{job.title_manual}]")
+    # Reconcile the output path if the title was changed while this job ran.
+    logging.debug("Job title status: [%s]", job.title_manual)
     if job.title_manual:
-        # Remove the old final dir
-        utils.delete_raw_files([final_directory])
         job_title = utils.fix_job_title(job)
-        final_directory = os.path.join(job.config.COMPLETED_PATH, type_sub_folder, job_title)
-        # Update the job.path with the final directory
-        utils.database_updater({'path': final_directory}, job)
+        manual_final_directory = os.path.join(job.config.COMPLETED_PATH, type_sub_folder, job_title)
+        current_path = os.path.normcase(os.path.abspath(final_directory))
+        updated_path = os.path.normcase(os.path.abspath(manual_final_directory))
+        if current_path != updated_path:
+            # Keep special-feature content if its movie directory needs to be renamed.
+            if os.path.isfile(special_marker) and not os.path.exists(manual_final_directory):
+                os.rename(final_directory, manual_final_directory)
+            else:
+                utils.delete_raw_files([final_directory])
+            final_directory = manual_final_directory
+            special_marker = os.path.join(final_directory, ".arm-special-features-only")
+            utils.database_updater({'path': final_directory}, job)
 
     # Move to final folder
     move_files_post(transcode_out_path, job)
-    # Movie the movie poster if we have one - no longer needed, now handled by save_movie_poster
-    utils.move_movie_poster(final_directory, transcode_out_path)
+    # A matching movie file now exists, so future jobs should follow the normal duplicate policy.
+    if not is_special_features and os.path.isfile(special_marker):
+        expected_movie_file = os.path.join(job.path, utils.fix_job_title(job) + "." + job.config.DEST_EXT)
+        if os.path.isfile(expected_movie_file):
+            try:
+                os.remove(special_marker)
+            except OSError as error:
+                logging.warning("Could not remove special-feature directory marker %s: %s", special_marker, error)
+    # Preserve the movie poster when processing a special-feature disc.
+    if not is_special_features:
+        utils.move_movie_poster(final_directory, transcode_out_path)
     # Scan Emby if arm.yaml requires it
     utils.scan_emby()
     # Set permissions if arm.yaml requires it
@@ -127,7 +200,12 @@ def start_transcode(job, logfile, raw_in_path, transcode_out_path, protection):
             logging.debug(f"ffmpeg_mkv: {raw_in_path}, {transcode_out_path}")
             ffmpeg.ffmpeg_mkv(raw_in_path, transcode_out_path, job)
         # Otherwise if it is a movie and mainfeature is enabled then run ffmpeg_main_feature
-        elif job.video_type == "movie" and job.config.MAINFEATURE and job.hasnicetitle:
+        elif (
+            job.video_type == "movie"
+            and job.config.MAINFEATURE
+            and job.hasnicetitle
+            and not bool(getattr(job, "special_features", False))
+        ):
             logging.debug(f"ffmpeg_main_feature: {raw_in_path}, {transcode_out_path}")
             ffmpeg.ffmpeg_main_feature(raw_in_path, transcode_out_path, job)
             db.session.commit()
@@ -148,7 +226,12 @@ def start_transcode(job, logfile, raw_in_path, transcode_out_path, protection):
             logging.debug(f"handbrake_mkv: {raw_in_path}, {transcode_out_path}, {logfile}")
             handbrake.handbrake_mkv(raw_in_path, transcode_out_path, logfile, job)
         # Otherwise if it is a movie and mainfeature is enabled then run handbrake_main_feature
-        elif job.video_type == "movie" and job.config.MAINFEATURE and job.hasnicetitle:
+        elif (
+            job.video_type == "movie"
+            and job.config.MAINFEATURE
+            and job.hasnicetitle
+            and not bool(getattr(job, "special_features", False))
+        ):
             logging.debug(f"handbrake_main_feature: {raw_in_path}, {transcode_out_path}, {logfile}")
             handbrake.handbrake_main_feature(raw_in_path, transcode_out_path, logfile, job)
             db.session.commit()
@@ -195,6 +278,11 @@ def move_files_post(transcode_out_path, job):
     :return: None
     """
     tracks = job.tracks.filter_by(ripped=True)  # .order_by(job.tracks.length.desc())
+    if bool(getattr(job, "special_features", False)) and str(job.video_type or "").lower() == "movie":
+        for track in tracks:
+            utils.move_files(transcode_out_path, track.filename, job, False)
+        return
+
     if job.video_type == "series":
         for track in tracks:
             utils.move_files(transcode_out_path, track.filename, job, False)

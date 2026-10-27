@@ -283,8 +283,18 @@ def move_files(base_path, filename, job, is_main_feature=False):
 
     movie_path = job.path
     logging.info(f"Moving {job.video_type} {filename} to {movie_path}")
-    # For series there are no extras so always use the base path
-    extras_path = os.path.join(movie_path, job.config.EXTRAS_SUB) if job.video_type != "series" else movie_path
+    # Special-feature discs always go with the movie, under its configured extras folder
+    # when one is configured; otherwise keep them in the movie directory itself.
+    if bool(getattr(job, "special_features", False)) and str(job.video_type or "").lower() == "movie":
+        extras_subfolder = str(getattr(job.config, "EXTRAS_SUB", "extras") or "").strip()
+        extras_path = (
+            os.path.join(movie_path, extras_subfolder)
+            if extras_subfolder and extras_subfolder.lower() != "none"
+            else movie_path
+        )
+    else:
+        # Preserve the existing routing for ordinary movie extras and series.
+        extras_path = os.path.join(movie_path, job.config.EXTRAS_SUB) if job.video_type != "series" else movie_path
     make_dir(movie_path)
 
     if is_main_feature:

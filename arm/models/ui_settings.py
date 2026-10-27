@@ -13,10 +13,19 @@ class UISettings(db.Model):
     index_refresh = db.Column(db.Integer)
     database_limit = db.Column(db.Integer)
     notify_refresh = db.Column(db.Integer)
+    show_job_ripper = db.Column(db.Boolean, nullable=False, default=True)
+    show_job_rip_method = db.Column(db.Boolean, nullable=False, default=True)
+    show_job_main_feature = db.Column(db.Boolean, nullable=False, default=True)
+    show_job_min_length = db.Column(db.Boolean, nullable=False, default=True)
+    show_job_max_length = db.Column(db.Boolean, nullable=False, default=True)
+    device_display_mode = db.Column(db.String(16), nullable=False, default="coded")
 
     def __init__(self, use_icons=None, save_remote_images=None,
                  bootstrap_skin=None, language=None, index_refresh=None,
-                 database_limit=None, notify_refresh=None):
+                 database_limit=None, notify_refresh=None, show_job_ripper=True,
+                 show_job_rip_method=True, show_job_main_feature=True,
+                 show_job_min_length=True, show_job_max_length=True,
+                 device_display_mode="coded"):
         self.use_icons = use_icons
         self.save_remote_images = save_remote_images
         self.bootstrap_skin = bootstrap_skin
@@ -24,6 +33,12 @@ class UISettings(db.Model):
         self.index_refresh = index_refresh
         self.database_limit = database_limit
         self.notify_refresh = notify_refresh
+        self.show_job_ripper = bool(show_job_ripper)
+        self.show_job_rip_method = bool(show_job_rip_method)
+        self.show_job_main_feature = bool(show_job_main_feature)
+        self.show_job_min_length = bool(show_job_min_length)
+        self.show_job_max_length = bool(show_job_max_length)
+        self.device_display_mode = device_display_mode or "coded"
 
     def __repr__(self):
         return f'<UISettings {self.id}>'

@@ -14,18 +14,79 @@ const CARD_DECK = ".card-deck";
 const SUCCESS_CLASS = "alert-success";
 const MODAL_FOOTER = ".modal-footer";
 
-function getRipperName(job, idsplit) {
-    let ripperName;
-    if (job.ripper) {
-        ripperName = job.ripper;
-    } else {
-        if (idsplit[0] === "0") {
-            ripperName = "Local";
-        } else {
-            ripperName = "";
-        }
+function escapeHtml(value) {
+    const entities = {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"};
+    return String(value === null || value === undefined ? "" : value)
+        .replace(/[&<>"']/g, character => entities[character]);
+}
+
+function mediaTypeLabel(value) {
+    const type = String(value || "Unknown").trim();
+    return type ? type.charAt(0).toUpperCase() + type.slice(1).toLowerCase() : "Unknown";
+}
+
+function positiveNumber(value) {
+    const number = parseInt(value, 10);
+    return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function isEnabled(value) {
+    return value === true || ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
+}
+
+function formatElapsedSeconds(value) {
+    let seconds = Math.max(0, Math.floor(Number(value) || 0));
+    const days = Math.floor(seconds / 86400);
+    seconds %= 86400;
+    const hours = Math.floor(seconds / 3600);
+    seconds %= 3600;
+    const minutes = Math.floor(seconds / 60);
+    seconds %= 60;
+    const clock = [hours, minutes, seconds].map(part => String(part).padStart(2, "0")).join(":");
+    return days > 0 ? `${days}d ${clock}` : clock;
+}
+
+function startElapsedJobClock() {
+    if (window.armElapsedJobClockStarted) return;
+    window.armElapsedJobClockStarted = true;
+    window.setInterval(function () {
+        document.querySelectorAll(".arm-elapsed-time[data-running='true']").forEach(function (node) {
+            const elapsed = Math.max(0, Number(node.dataset.elapsedSeconds) || 0) + 1;
+            node.dataset.elapsedSeconds = String(elapsed);
+            node.textContent = formatElapsedSeconds(elapsed);
+        });
+    }, 1000);
+}
+startElapsedJobClock();
+
+function buildDiscMetadataBadges(job) {
+    const badges = [];
+    const season = positiveNumber(job.season_number);
+    const disc = positiveNumber(job.disc_number);
+    const first = positiveNumber(job.episode_start);
+    const last = positiveNumber(job.episode_end);
+    if (season) badges.push(`<span class="arm-job-metadata-badge">Season ${String(season).padStart(2, "0")}</span>`);
+    if (disc) badges.push(`<span class="arm-job-metadata-badge">Disc ${disc}</span>`);
+    if (first && last) {
+        const range = first === last ? String(first).padStart(2, "0")
+            : `${String(first).padStart(2, "0")}–${String(last).padStart(2, "0")}`;
+        badges.push(`<span class="arm-job-metadata-badge">Episodes ${range}</span>`);
+    } else if (first || last) {
+        const episode = String(first || last).padStart(2, "0");
+        badges.push(`<span class="arm-job-metadata-badge">Episode ${episode}</span>`);
     }
-    return ripperName;
+    if (isEnabled(job.special_features)) {
+        badges.push('<span class="arm-job-metadata-badge arm-job-special-badge">Special Features</span>');
+    }
+    return badges.join("");
+}
+
+function getRipperName(job, idsplit) {
+    const reportedName = String(job.ripper || "").trim();
+    if (reportedName && !["none", "null", "undefined"].includes(reportedName.toLowerCase())) {
+        return reportedName;
+    }
+    return idsplit[0] === "0" ? "Local" : "";
 }
 
 function addJobItem(job, authenticated) {
@@ -49,9 +110,10 @@ function addJobItem(job, authenticated) {
 
 function transcodingCheck(job) {
     let x = "";
-    if (job.status === "transcoding" && job.stage !== "" && job.progress || job.disctype === "music" && job.stage !== "") {
+    if ((job.status === "transcoding" && job.stage !== "" && job.progress) ||
+        (job.disctype === "music" && job.stage !== "")) {
         x += `<div id="jobId${job.job_id}_stage"><strong>Stage: </strong>${job.stage}</div>`;
-        x += `<div id="jobId${job.job_id}_progress" >`;
+        x += `<div id="jobId${job.job_id}_progress">`;
         x += `<div class="progress">
                 <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
                 aria-valuenow="${job.progress_round}" aria-valuemin="0" aria-valuemax="100"
@@ -65,22 +127,43 @@ function transcodingCheck(job) {
         x += `<div id="jobId${job.job_id}_cur_fps"><strong>CUR FPS: </strong>${job.cur_fps}</div>`;
         x += `<div id="jobId${job.job_id}_avg_fps"><strong>AVG FPS: </strong>${job.avg_fps}</div>`;
     }
-    // YYYY-MM-DD
-    const d = new Date(Date.parse(job.start_time));
-    const datestring = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
-
-    x += `<strong>Start Date:</strong> ${datestring}<br>`;
-    x += `<strong>Start Time:</strong> ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}<br>`;
-    x += `<strong>Job Time:</strong> ${job.job_length === undefined ? "Ongoing" : job.job_length}<br>`;
+    const start = Date.parse(job.start_time);
+    const startValid = Number.isFinite(start);
+    if (startValid) {
+        const d = new Date(start);
+        const datestring = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        x += `<div><strong>Start:</strong> ${datestring} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}</div>`;
+    }
+    const elapsed = job.elapsed_seconds === null || job.elapsed_seconds === undefined
+        ? 0 : Math.max(0, Number(job.elapsed_seconds) || 0);
+    const running = !["success", "fail"].includes(String(job.status || "").toLowerCase());
+    const elapsedText = job.job_length && job.job_length !== "None" && !running
+        ? job.job_length : formatElapsedSeconds(elapsed);
+    x += `<div id="jobId${job.job_id}_elapsed"><strong>Elapsed Job Time:</strong> <span class="arm-elapsed-time" data-elapsed-seconds="${elapsed}" data-running="${running}">${elapsedText}</span></div>`;
     return x;
 }
 
 function musicCheck(job, idsplit) {
     let x = "";
-    if (job.video_type !== "Music") {
-        x = `<a href="titlesearch?job_id=${idsplit[1]}" class="btn btn-primary">Title Search</a>
-             <a href="customTitle?job_id=${idsplit[1]}" class="btn btn-primary">Custom Title</a>
-             <a href="changeparams?config_id=${idsplit[1]}" class="btn btn-primary">Edit Settings</a>`;
+    const mediaType = String(job.video_type || "").trim().toLowerCase();
+    if (mediaType !== "music") {
+        x += `<a href="titlesearch?job_id=${encodeURIComponent(idsplit[1])}" class="btn btn-primary">Title Search</a>
+             <a href="customTitle?job_id=${encodeURIComponent(idsplit[1])}" class="btn btn-primary">Custom Title</a>
+             <a href="changeparams?config_id=${encodeURIComponent(idsplit[1])}" class="btn btn-primary">Edit Settings</a>`;
+    }
+    if (mediaType === "movie" || mediaType === "unknown" || mediaType === "") {
+        const params = new URLSearchParams({
+            job_id: String(idsplit[1]),
+            type: job.video_type || "movie",
+            season_number: job.season_number || "",
+            disc_number: job.disc_number || "",
+            episode_start: job.episode_start || "",
+            episode_end: job.episode_end || "",
+            special_features: "1",
+            special_features_auto: "0",
+            metadata_controls: "1"
+        });
+        x += `<a href="titlesearch?${params.toString()}" class="btn btn-primary">Special Features</a>`;
     }
     return x;
 }
@@ -95,20 +178,18 @@ function posterCheck(job) {
 }
 
 function titleManual(job) {
-    let x;
-    if (job.title_manual !== "None") {
-        x = `${job.title_manual}(${job.year})`;
-    } else {
-        x = `${job.title}(${job.year})`;
-    }
-    return x;
+    const manualTitle = job.title_manual && job.title_manual !== "None" ? job.title_manual : job.title;
+    const title = manualTitle && manualTitle !== "None" ? manualTitle : "Unknown title";
+    const year = job.year && job.year !== "None" ? ` (${job.year})` : "";
+    return `${title}${year}`;
 }
 
 function buildMiddleSection(job) {
     let x = "<div class=\"arm-job-info-column\"><div class=\"card-body px-2 py-2\">";
-    x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${job.year}</div>`;
-    x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${job.video_type}</div>`;
-    x += `<div id="jobId${job.job_id}_devpath"><strong>Device: </strong>${job.devpath}</div>`;
+    x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${job.year || "—"}</div>`;
+    x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${mediaTypeLabel(job.video_type)}</div>`;
+    x += `<div id="jobId${job.job_id}_devpath"><strong>Device: </strong>${escapeHtml(job.display_device || job.devpath || "—")}</div>`;
+    x += `<div id="jobId${job.job_id}_disc_metadata" class="arm-job-metadata">${buildDiscMetadataBadges(job)}</div>`;
     x += `<div><strong>Status: </strong><img id="jobId${job.job_id}_status" class="arm-job-status-icon" src="/static/img/${job.status}.png" width="20" height="20" alt="${job.status}" title="${job.status}"></div>`;
     x += `<div id="jobId${job.job_id}_progress_section">${transcodingCheck(job)}</div>`;
     x += "</div></div>";
@@ -121,12 +202,24 @@ function buildRightSection(job, idsplit, authenticated) {
         idsplit[0] = "0";
         idsplit[1] = job.job_id;
     }
-    let x = "<div class=\"arm-job-actions-column\"><div class=\"card-body px-2 py-2\">";
-    x += `<div id="jobId${job.job_id}_RIPPER"><strong>Ripper: </strong>${getRipperName(job, idsplit)}</div>`;
-    x += `<div id="jobId${job.job_id}_RIPMETHOD"><strong>Rip Method: </strong>${job.config.RIPMETHOD}</div>`;
-    x += `<div id="jobId${job.job_id}_MAINFEATURE"><strong>Main Feature: </strong>${job.config.MAINFEATURE}</div>`;
-    x += `<div id="jobId${job.job_id}_MINLENGTH"><strong>Min Length: </strong>${job.config.MINLENGTH}</div>`;
-    x += `<div id="jobId${job.job_id}_MAXLENGTH"><strong>Max Length: </strong>${job.config.MAXLENGTH}</div>`;
+    const config = job.config && typeof job.config === "object" ? job.config : {};
+    const settings = job.card_settings && typeof job.card_settings === "object" ? job.card_settings : {};
+    let x = "<div class=\"arm-job-actions-column\"><div class=\"card-body px-2 py-2 arm-job-config\">";
+    if (settings.show_job_ripper !== false) {
+        x += `<div id="jobId${job.job_id}_RIPPER"><strong>Ripper: </strong>${getRipperName(job, idsplit)}</div>`;
+    }
+    if (settings.show_job_rip_method !== false) {
+        x += `<div id="jobId${job.job_id}_RIPMETHOD"><strong>Rip Method: </strong>${config.RIPMETHOD || "—"}</div>`;
+    }
+    if (settings.show_job_main_feature !== false) {
+        x += `<div id="jobId${job.job_id}_MAINFEATURE"><strong>Main Feature: </strong>${config.MAINFEATURE || "False"}</div>`;
+    }
+    if (settings.show_job_min_length !== false) {
+        x += `<div id="jobId${job.job_id}_MINLENGTH"><strong>Min Length: </strong>${config.MINLENGTH || "0"}</div>`;
+    }
+    if (settings.show_job_max_length !== false) {
+        x += `<div id="jobId${job.job_id}_MAXLENGTH"><strong>Max Length: </strong>${config.MAXLENGTH || "—"}</div>`;
+    }
     x += "</div><div class=\"card-body px-2 py-1 arm-job-actions\">";
     if (authenticated === true) {
         x += `<div class="btn-group-vertical w-100" role="group" aria-label="Job actions" ${idsplit[0] !== "0" ? "style=\"display: none;\"" : ""}>`;

@@ -1,5 +1,9 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
+
+import arm.ripper.utils as ripper_utils
+from arm.ripper.arm_ripper import _apply_disc_feature_defaults
 
 from arm.ripper.utils import clean_for_filename, fix_job_title
 from arm.ui.utils import clean_for_filename as ui_clean_for_filename
@@ -87,6 +91,71 @@ class TestMediaFolderNaming(unittest.TestCase):
         self.assertIsNone(episode_only["season_number"])
         self.assertEqual(episode_only["episode_start"], 1)
         self.assertEqual(episode_only["episode_end"], 3)
+
+    def test_movie_disc_two_automatically_selects_special_features(self):
+        job = self.make_job("Jaws", year="1975")
+        job.video_type = "movie"
+        job.disc_number = 2
+        job.special_features = False
+        job.special_features_auto = True
+        with patch("arm.ripper.arm_ripper.db.session.commit"):
+            _apply_disc_feature_defaults(job)
+        self.assertTrue(job.special_features)
+
+    def test_auto_special_features_does_not_select_series_disc_two(self):
+        job = self.make_job("Sherlock", year="2010")
+        job.video_type = "series"
+        job.disc_number = 2
+        job.special_features = False
+        job.special_features_auto = True
+        with patch("arm.ripper.arm_ripper.db.session.commit"):
+            _apply_disc_feature_defaults(job)
+        self.assertFalse(job.special_features)
+
+    def test_manual_special_feature_choice_is_preserved(self):
+        job = self.make_job("Jaws", year="1975")
+        job.video_type = "movie"
+        job.disc_number = 1
+        job.special_features = True
+        job.special_features_auto = False
+        with patch("arm.ripper.arm_ripper.db.session.commit"):
+            _apply_disc_feature_defaults(job)
+        self.assertTrue(job.special_features)
+
+    def test_movie_disc_two_uses_the_same_movie_folder_name(self):
+        disc_one = self.make_job("Jaws", year="1975")
+        disc_two = self.make_job("Jaws", year="1975")
+        disc_one.disc_number = 1
+        disc_two.disc_number = 2
+        self.assertEqual(fix_job_title(disc_one), fix_job_title(disc_two))
+
+    def test_special_feature_movie_files_go_to_extras_subfolder(self):
+        job = self.make_job("Jaws", year="1975")
+        job.path = "/media/completed/movie/Jaws (1975)"
+        job.special_features = True
+        job.hasnicetitle = True
+        job.config.EXTRAS_SUB = "extras"
+        job.config.DEST_EXT = "mkv"
+        with patch("arm.ripper.utils.make_dir"), patch("arm.ripper.utils.move_files_main") as mover:
+            ripper_utils.move_files("/tmp/transcode", "feature-01.mkv", job, False)
+        self.assertEqual(
+            mover.call_args.args[1],
+            "/media/completed/movie/Jaws (1975)/extras/feature-01.mkv",
+        )
+
+    def test_special_feature_movie_without_extras_subfolder_stays_in_movie_folder(self):
+        job = self.make_job("Jaws", year="1975")
+        job.path = "/media/completed/movie/Jaws (1975)"
+        job.special_features = True
+        job.hasnicetitle = True
+        job.config.EXTRAS_SUB = "none"
+        job.config.DEST_EXT = "mkv"
+        with patch("arm.ripper.utils.make_dir"), patch("arm.ripper.utils.move_files_main") as mover:
+            ripper_utils.move_files("/tmp/transcode", "feature-01.mkv", job, False)
+        self.assertEqual(
+            mover.call_args.args[1],
+            "/media/completed/movie/Jaws (1975)/feature-01.mkv",
+        )
 
     def test_series_output_includes_episode_range_and_one_provider_id(self):
         job = self.make_job("Sherlock [imdbid-tt1475582]", year="2010",

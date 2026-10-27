@@ -571,3 +571,135 @@ img, video, canvas, iframe { max-width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   .arm-notification-drawer, .arm-resource-drawer { transition:none; }
 }
+
+
+/* Active jobs: slightly larger posters with streaming-service style metadata chips. */
+.arm-job-poster-column {
+  flex: 0 0 30%;
+  max-width: 30%;
+}
+.arm-job-poster {
+  max-width: 154px;
+  max-height: 214px;
+}
+.arm-job-info-column {
+  flex: 1 1 34%;
+  max-width: 34%;
+}
+.arm-job-actions-column {
+  flex: 1 1 36%;
+  max-width: 36%;
+}
+.arm-job-card-header {
+  font-size: 1.02rem;
+}
+.arm-job-metadata,
+.arm-job-detail-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .32rem;
+  margin: .45rem 0 .55rem;
+}
+.arm-job-metadata-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: .19rem .48rem;
+  border: 1px solid var(--arm-border);
+  border-radius: 999px;
+  background: var(--arm-surface-muted);
+  color: var(--arm-text);
+  font-size: .76rem;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.arm-job-special-badge {
+  color: var(--arm-primary);
+  border-color: var(--arm-primary);
+  background: rgba(45, 99, 216, .08);
+}
+.arm-job-config {
+  font-size: .82rem;
+  line-height: 1.45;
+}
+.arm-job-config > div {
+  padding: .18rem 0;
+  border-bottom: 1px solid var(--arm-border);
+  overflow-wrap: anywhere;
+}
+.arm-job-config > div:last-child {
+  border-bottom: 0;
+}
+.arm-elapsed-time {
+  display: inline-block;
+  min-width: 5.4rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.arm-detail-poster {
+  display: block;
+  width: min(290px, 100%);
+  max-height: 440px;
+  margin: 0 auto;
+  object-fit: contain;
+}
+.arm-job-detail-metadata {
+  justify-content: center;
+  margin-top: .6rem;
+  margin-bottom: .35rem;
+}
+.arm-special-feature-control {
+  text-align: left;
+}
+#toggle-special-features {
+  font-weight: 700;
+}
+#special-features-hint {
+  max-width: 42rem;
+  line-height: 1.4;
+}
+.arm-disc-controls .arm-special-feature-control {
+  padding: .7rem .75rem;
+  margin: .3rem 0 .9rem;
+  border: 1px solid var(--arm-border);
+  border-radius: 10px;
+  background: var(--arm-surface-muted);
+}
+.arm-search-poster {
+  max-height: 18rem;
+  width: auto;
+}
+.arm-selected-poster {
+  max-height: 30rem;
+}
+@media (max-width: 767.98px) {
+  .arm-job-poster-column {
+    flex: none;
+    max-width: none;
+  }
+  .arm-job-card-content {
+    grid-template-columns: 116px minmax(0, 1fr);
+  }
+  .arm-job-poster {
+    max-width: 108px;
+    max-height: 154px;
+  }
+  .arm-job-info-column,
+  .arm-job-actions-column {
+    width: auto;
+    max-width: none;
+    flex: none;
+    min-width: 0;
+  }
+  .arm-job-actions-column {
+    grid-column: 2;
+  }
+  .arm-job-config {
+    padding-top: .1rem !important;
+  }
+  .arm-detail-poster {
+    width: min(260px, 100%);
+  }
+}

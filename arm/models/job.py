@@ -135,6 +135,8 @@ class Job(db.Model):
     tmdb_id = db.Column(db.String(20))
     season_number = db.Column(db.Integer)
     disc_number = db.Column(db.Integer)
+    special_features = db.Column(db.Boolean, nullable=False, default=False)
+    special_features_auto = db.Column(db.Boolean, nullable=False, default=True)
     episode_start = db.Column(db.Integer)
     episode_end = db.Column(db.Integer)
     imdb_id_auto = db.Column(db.String(15))
@@ -164,6 +166,8 @@ class Job(db.Model):
         self.devpath = devpath
         self.mountpoint = ""
         self.hasnicetitle = False
+        self.special_features = False
+        self.special_features_auto = True
         self.video_type = "unknown"
         self.ejected = False
         self.updated = False

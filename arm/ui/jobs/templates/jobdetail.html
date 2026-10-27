@@ -67,6 +67,14 @@
                         <!-- GF Comment -->
                         <div class="card-header text-center">
                             <h4>{{ jobs.title }} - {{ jobs.video_type.capitalize() }} ({{ jobs.year }})</h4>
+                            <div class="arm-job-detail-metadata">
+                                {% if jobs.season_number %}<span class="arm-job-metadata-badge">Season {{ "%02d"|format(jobs.season_number) }}</span>{% endif %}
+                                {% if jobs.disc_number %}<span class="arm-job-metadata-badge">Disc {{ jobs.disc_number }}</span>{% endif %}
+                                {% if jobs.episode_start and jobs.episode_end %}
+                                    <span class="arm-job-metadata-badge">Episodes {{ "%02d"|format(jobs.episode_start) }}{% if jobs.episode_start != jobs.episode_end %}–{{ "%02d"|format(jobs.episode_end) }}{% endif %}</span>
+                                {% endif %}
+                                {% if jobs.special_features %}<span class="arm-job-metadata-badge arm-job-special-badge">Special Features</span>{% endif %}
+                            </div>
                             <div class="ratings float-right mt-0">
                                 <!-- Proof that just because you CAN doesnt mean you should! -->
                                 {% for ratings in s['Ratings'] %}
@@ -81,10 +89,10 @@
                             <div class="card-header background-poster">
                                 {% if jobs.video_type == "Music" %}
                                     <a id="posterClick" href="#">
-                                    <img src="static/img/music.png" alt="Not found" width="240px" class="img-thumbnail"></a>
+                                    <img src="static/img/music.png" alt="Not found" class="img-thumbnail arm-detail-poster"></a>
                                 {% else %}
                                     <a id="posterClick" href="#">
-                                    <img src="static/img/none.png" alt="Not found" width="240px" class="img-thumbnail"></a>
+                                    <img src="static/img/none.png" alt="Not found" class="img-thumbnail arm-detail-poster"></a>
                                 {% endif %}
                                 {% if jobs.video_type != "Music" %}
                                     <div class="btn-group float-right mt-2" role="group">
@@ -92,6 +100,16 @@
                                             Search</a>
                                         <a href="customTitle?job_id={{ jobs.job_id }}" class="btn btn-primary">Custom
                                             Title</a>
+                                        {% if jobs.video_type|lower == "movie" %}
+                                            <a href="{{ url_for('route_jobs.title_search', job_id=jobs.job_id,
+                                                type=jobs.video_type,
+                                                season_number=jobs.season_number if jobs.season_number is not none else '',
+                                                disc_number=jobs.disc_number if jobs.disc_number is not none else '',
+                                                episode_start=jobs.episode_start if jobs.episode_start is not none else '',
+                                                episode_end=jobs.episode_end if jobs.episode_end is not none else '',
+                                                special_features='1', special_features_auto='0', metadata_controls='1') }}"
+                                               class="btn btn-primary">Special Features</a>
+                                        {% endif %}
                                         <a id="plot" class="btn btn-primary">Plot</a>
                                     </div>
                                 {% endif %}
@@ -99,7 +117,7 @@
                         {% else %}
                             <div class="card-header background-poster">
                                 <a id="posterClick" href="#">
-                                    <img src="{{ jobs.poster_url }}" width="240px" class="img-thumbnail"
+                                    <img src="{{ jobs.poster_url }}" class="img-thumbnail arm-detail-poster"
                                          alt="Movie Poster"></a>
                                 {% if jobs.video_type != "Music" %}
                                     <div class="btn-group float-right mt-2" role="group">
@@ -107,6 +125,16 @@
                                             Search</a>
                                         <a href="customTitle?job_id={{ jobs.job_id }}" class="btn btn-primary">Custom
                                             Title</a>
+                                        {% if jobs.video_type|lower == "movie" %}
+                                            <a href="{{ url_for('route_jobs.title_search', job_id=jobs.job_id,
+                                                type=jobs.video_type,
+                                                season_number=jobs.season_number if jobs.season_number is not none else '',
+                                                disc_number=jobs.disc_number if jobs.disc_number is not none else '',
+                                                episode_start=jobs.episode_start if jobs.episode_start is not none else '',
+                                                episode_end=jobs.episode_end if jobs.episode_end is not none else '',
+                                                special_features='1', special_features_auto='0', metadata_controls='1') }}"
+                                               class="btn btn-primary">Special Features</a>
+                                        {% endif %}
                                         <a id="plot" class="btn btn-primary">Plot</a>
                                     </div>
                                 {% endif %}
@@ -147,6 +175,22 @@
                                 <tr>
                                     <td style="text-align:left"><strong>disc</strong></td>
                                     <td style="text-align:left">{{ jobs.disc }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="text-align:left"><strong>Season Number</strong></td>
+                                    <td style="text-align:left">{{ jobs.season_number if jobs.season_number is not none else "Not set" }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="text-align:left"><strong>Disc Number</strong></td>
+                                    <td style="text-align:left">{{ jobs.disc_number if jobs.disc_number is not none else "Not set" }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="text-align:left"><strong>Episode Range</strong></td>
+                                    <td style="text-align:left">{% if jobs.episode_start and jobs.episode_end %}{{ jobs.episode_start }}{% if jobs.episode_start != jobs.episode_end %}–{{ jobs.episode_end }}{% endif %}{% else %}Not set{% endif %}</td>
+                                </tr>
+                                <tr>
+                                    <td style="text-align:left"><strong>Special Features</strong></td>
+                                    <td style="text-align:left">{{ "Enabled" if jobs.special_features else "Disabled" }}</td>
                                 </tr>
                                 <tr>
                                     <td style="text-align:left"><strong>start_time</strong></td>

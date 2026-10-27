@@ -145,15 +145,14 @@ function checkTranscodeStatus(job) {
  */
 function updateContents(item, _job, keyString, itemContents) {
     if (item[0] === undefined) {
-        console.log(item)
         return false;
     }
-    if (item[0].innerText.includes(itemContents)) {
-        //console.log("nothing to do - values are current")
-    } else {
-        item[0].innerHTML = `<b> ${keyString}: </b>${itemContents}`;
-        console.log(`${item[0].innerText} - <b>${keyString}: </b>${itemContents}`)
-        console.log(item[0].innerText.includes(itemContents))
+    const value = String(itemContents === null || itemContents === undefined ? "" : itemContents);
+    const expectedText = `${keyString}: ${value}`;
+    if (item[0].innerText.trim() !== expectedText.trim()) {
+        const label = document.createElement("b");
+        label.textContent = `${keyString}: `;
+        item[0].replaceChildren(label, document.createTextNode(value));
     }
     return true;
 }
@@ -167,9 +166,10 @@ function updateJobItem(oldJob, job) {
     const cardHeader = $(`#jobId${job.job_id}_header`);
     const posterUrl = $(`#jobId${job.job_id}_poster_url`);
     const status = $(`#jobId${job.job_id}_status`);
-    // Update card header ( Title (Year) )
-    if (cardHeader[0].innerText !== `${job.title} (${job.year})`) {
-        cardHeader[0].innerText = `${job.title} (${job.year})`;
+    // Keep the title header consistent with manual title overrides and optional year.
+    const updatedCardTitle = titleManual(job);
+    if (cardHeader[0].innerText !== updatedCardTitle) {
+        cardHeader[0].innerText = updatedCardTitle;
     }
     // Update card poster image
     if (job.poster_url !== posterUrl[0].src && job.poster_url !== "None" && job.poster_url !== "N/A") {
@@ -183,8 +183,16 @@ function updateJobItem(oldJob, job) {
     }
     // Go through and update job values as needed
     updateContents($(`#jobId${job.job_id}_year`), job, "Year", job.year);
-    updateContents($(`#jobId${job.job_id}_devpath`), job, "Device", job.devpath);
-    updateContents($(`#jobId${job.job_id}_video_type`), job, "Type", job.video_type);
+    updateContents($(`#jobId${job.job_id}_devpath`), job, "Device", job.display_device || job.devpath || "—");
+    updateContents($(`#jobId${job.job_id}_video_type`), job, "Type", mediaTypeLabel(job.video_type));
+    const metadataNode = document.getElementById(`jobId${job.job_id}_disc_metadata`);
+    if (metadataNode) metadataNode.innerHTML = buildDiscMetadataBadges(job);
+    const elapsedNode = document.querySelector(`#jobId${job.job_id}_elapsed .arm-elapsed-time`);
+    if (elapsedNode && job.elapsed_seconds !== null && job.elapsed_seconds !== undefined) {
+        elapsedNode.dataset.elapsedSeconds = String(Math.max(0, Number(job.elapsed_seconds) || 0));
+        elapsedNode.dataset.running = String(!["success", "fail"].includes(String(job.status || "").toLowerCase()));
+        elapsedNode.textContent = formatElapsedSeconds(elapsedNode.dataset.elapsedSeconds);
+    }
     updateProgress(job, oldJob);
     updateContents($(`#jobId${job.job_id}_RIPMETHOD`), job, "Rip Method", job.config.RIPMETHOD);
     updateContents($(`#jobId${job.job_id}_MAINFEATURE`), job, "Main Feature", job.config.MAINFEATURE);

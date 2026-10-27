@@ -60,6 +60,16 @@ class UiSettingsForm(FlaskForm):
     language = StringField('language', validators=[DataRequired()])
     database_limit = IntegerField('database_limit', validators=[DataRequired()])
     notify_refresh = IntegerField('notify_refresh', validators=[DataRequired()])
+    show_job_ripper = BooleanField('show_job_ripper')
+    show_job_rip_method = BooleanField('show_job_rip_method')
+    show_job_main_feature = BooleanField('show_job_main_feature')
+    show_job_min_length = BooleanField('show_job_min_length')
+    show_job_max_length = BooleanField('show_job_max_length')
+    device_display_mode = SelectField(
+        'device_display_mode',
+        choices=[('coded', 'Device path (e.g. /dev/sr0)'), ('display', 'Configured drive name')],
+        validators=[DataRequired()],
+    )
     submit = SubmitField('Submit')
 
 
