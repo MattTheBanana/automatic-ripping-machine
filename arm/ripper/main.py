@@ -131,6 +131,7 @@ def main():
         # MakeMKV has already copied the data to disk, the subsequent transcode
         # must not produce a false drive-sleep alert.
         direct_drive_source = not arm_ripper.rip_with_mkv(job, job.has_track_99)
+        job._arm_direct_drive_source = direct_drive_source
         drive_watchdog = utils.DriveSleepWatchdog(
             job, direct_drive_source=direct_drive_source
         )
@@ -292,6 +293,25 @@ if __name__ == "__main__":
         # An open tray/no medium is an expected drive state, not a failed job.
         logging.getLogger("ARM").info("No rip started: %s", not_ready)
     except Exception as error:
+        # A drive can report an open tray and fail its read between watchdog polls.
+        # Only classify the exception as a cancellation while the job is expected to
+        # be reading physical media, not when transcoding already-copied local files.
+        if job is not None and _job_registered and not getattr(job, "_arm_abort_reason", None):
+            status = str(getattr(job, "status", "") or "").lower()
+            disctype = str(getattr(job, "disctype", "") or "").lower()
+            reading_physical_media = (
+                (disctype in ("dvd", "bluray") and status == JobState.VIDEO_RIPPING.value)
+                or (disctype == "music" and status == JobState.AUDIO_RIPPING.value)
+                or (disctype == "data" and status == JobState.IDLE.value)
+                or (
+                    disctype in ("dvd", "bluray")
+                    and status == JobState.TRANSCODE_ACTIVE.value
+                    and bool(getattr(job, "_arm_direct_drive_source", False))
+                )
+            )
+            if reading_physical_media:
+                utils.detect_open_tray_abort(job)
+
         arm_logger = logging.getLogger("ARM")
         arm_logger.critical("A fatal error has occurred and ARM is exiting.")
         print_stacktrace = (
