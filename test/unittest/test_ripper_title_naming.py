@@ -317,7 +317,7 @@ class TestDriveSleepWatchdog(unittest.TestCase):
         self.assertFalse(direct_watchdog._poll_once(now=100))
         self.assertTrue(direct_watchdog._poll_once(now=110))
 
-    def test_music_jobs_are_not_monitored_as_optical_video_reads(self):
+    def test_music_jobs_monitor_active_audio_reads(self):
         watchdog, _job, _snapshot = self.make_watchdog(
             status="ripping", disctype="music", timeout=10
         )
