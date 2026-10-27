@@ -17,9 +17,9 @@
 
     const xhr = new XMLHttpRequest();
     {% if mode == 'tail' or mode == 'full' %}
-        xhr.open('GET', '/logreader?logfile={{ file }}&mode=full&json=1');
+        xhr.open('GET', '/logreader?logfile={{ file }}&mode=full&json=1{% if source == 'progress' %}&source=progress{% endif %}');
     {% else %}
-        xhr.open('GET', '/logreader?logfile={{ file }}&mode={{ mode }}&json=1');
+        xhr.open('GET', '/logreader?logfile={{ file }}&mode={{ mode }}&json=1{% if source == 'progress' %}&source=progress{% endif %}');
     {% endif %}
     xhr.open
     xhr.send();
