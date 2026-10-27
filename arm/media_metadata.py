@@ -37,10 +37,12 @@ world year young zero zone
 _GENERIC_DISC_TITLES = {
     "", "undefined", "unknown", "not identified", "unidentified", "untitled",
     "none", "null", "n a", "na", "video", "videos", "dvd", "dvd video",
-    "video dvd", "dvd video", "video ts", "audio ts", "blu ray", "bluray", "bd video",
-    "disc", "disk", "disc title", "disk title", "title", "movie", "film",
-    "data", "data disc", "volume", "track", "no title", "no name",
-    "default", "generic", "new volume", "isoimage", "iso image",
+    "video dvd", "video ts", "audio ts", "blu ray", "bluray", "bd video",
+    "blu ray disc", "blu ray video", "dvdrom", "dvd rom", "cd", "cdrom", "cd rom",
+    "vcd", "iso", "isoimage", "iso image", "disc", "disk", "disc title", "disk title",
+    "optical disc", "optical disk", "title", "movie", "film", "data", "data disc",
+    "volume", "volume label", "track", "no title", "no name", "no disc", "blank",
+    "default", "generic", "new volume",
 }
 
 
@@ -51,7 +53,7 @@ def is_generic_disc_title(value):
     if normalized in _GENERIC_DISC_TITLES:
         return True
     return bool(re.fullmatch(
-        r"(?:dvd|video|disc|disk|title|volume|track|movie|film)(?:\s+(?:\d+|[a-z]))?",
+        r"(?:dvd|video|disc|disk|title|volume|track|movie|film|data|cd|vcd|iso)(?:\s+(?:\d+|[a-z]))?",
         normalized,
     ))
 
