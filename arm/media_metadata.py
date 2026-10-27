@@ -42,7 +42,8 @@ _GENERIC_DISC_TITLES = {
     "vcd", "iso", "isoimage", "iso image", "disc", "disk", "disc title", "disk title",
     "disc label", "disk label", "unknown title", "unknown video", "unknown disc",
     "unknown disk", "unknown volume", "unidentified title", "unidentified video",
-    "untitled disc", "untitled movie", "video disc", "optical media", "optical disc",
+    "unidentified disc", "unidentified disk", "not identified disc", "not identified video",
+    "not identified volume", "untitled disc", "untitled movie", "video disc", "optical media", "optical disc",
     "optical disk", "title", "movie", "film", "data", "data disc", "volume",
     "volume label", "track", "no title", "no name", "no disc", "blank", "default",
     "generic", "new volume",
@@ -54,6 +55,10 @@ def is_generic_disc_title(value):
     normalized = re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
     normalized = re.sub(r"\s+", " ", normalized)
     if normalized in _GENERIC_DISC_TITLES:
+        return True
+    # Filesystem tools sometimes append a numeric volume index to a placeholder.
+    without_index = re.sub(r"\s+\d+$", "", normalized)
+    if without_index != normalized and without_index in _GENERIC_DISC_TITLES:
         return True
     return bool(re.fullmatch(
         r"(?:dvd|video|disc|disk|title|volume|track|movie|film|data|cd|vcd|iso)(?:\s+(?:\d+|[a-z]))?",
