@@ -194,10 +194,34 @@ function updateJobItem(oldJob, job) {
         elapsedNode.textContent = formatElapsedSeconds(elapsedNode.dataset.elapsedSeconds);
     }
     updateProgress(job, oldJob);
+    // Reapply current UI preferences on every refresh so cards already ripping
+    // respond immediately when visibility or device-name preferences change.
+    const cardSettings = job.card_settings && typeof job.card_settings === "object"
+        ? job.card_settings : {};
+    const configurableFields = [
+        ["RIPPER", "show_job_ripper"],
+        ["RIPMETHOD", "show_job_rip_method"],
+        ["MAINFEATURE", "show_job_main_feature"],
+        ["MINLENGTH", "show_job_min_length"],
+        ["MAXLENGTH", "show_job_max_length"]
+    ];
+    let anyConfigVisible = false;
+    configurableFields.forEach(function (field) {
+        const node = document.getElementById(`jobId${job.job_id}_${field[0]}`);
+        const visible = cardSettings[field[1]] !== false;
+        if (node) {
+            node.style.display = visible ? "" : "none";
+            anyConfigVisible = anyConfigVisible || visible;
+        }
+    });
+    const configSection = document.querySelector(`#jobId${job.job_id} .arm-job-config`);
+    if (configSection) configSection.style.display = anyConfigVisible ? "" : "none";
+
+    updateContents($(`#jobId${job.job_id}_RIPPER`), job, "Ripper", getRipperName(job, String(job.job_id).split("_")));
     updateContents($(`#jobId${job.job_id}_RIPMETHOD`), job, "Rip Method", job.config.RIPMETHOD);
-    updateContents($(`#jobId${job.job_id}_MAINFEATURE`), job, "Main Feature", job.config.MAINFEATURE);
-    updateContents($(`#jobId${job.job_id}_MINLENGTH`), job, "Min Length", job.config.MINLENGTH);
-    updateContents($(`#jobId${job.job_id}_MAXLENGTH`), job, "Max Length", job.config.MAXLENGTH);
+    updateContents($(`#jobId${job.job_id}_MAINFEATURE`), job, "Main Feature", job.config.MAINFEATURE || "False");
+    updateContents($(`#jobId${job.job_id}_MINLENGTH`), job, "Min Length", job.config.MINLENGTH || "0");
+    updateContents($(`#jobId${job.job_id}_MAXLENGTH`), job, "Max Length", job.config.MAXLENGTH || "—");
 }
 
 /**
@@ -313,6 +337,7 @@ function refreshJobs() {
         $.ajax({
             url: serverUrl + "/json?mode=joblist",
             type: "get",
+            cache: false,
             timeout: 2000,
             error: function () {
                 --serverCount;
