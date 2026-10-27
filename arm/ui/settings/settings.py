@@ -18,6 +18,7 @@ import platform
 import importlib
 import re
 import subprocess
+import time
 from datetime import datetime
 import os
 
@@ -45,6 +46,11 @@ route_settings = Blueprint('route_settings', __name__,
                            template_folder='templates',
                            static_folder='../static')
 REDIRECT_SETTINGS = "route_settings.settings"
+
+# Hardware capability probing launches HandBrake and is therefore cached separately
+# from frequently refreshed CPU, memory, and disk readings.
+_RESOURCE_HW_SUPPORT_CACHE = {"value": None, "updated_at": 0.0}
+_RESOURCE_HW_SUPPORT_CACHE_SECONDS = 300
 
 
 # Human-readable titles for the advanced ripper configuration keys.
@@ -627,7 +633,7 @@ def update_sysinfo():
 @route_settings.route('/resource_metrics')
 @login_required
 def resource_metrics():
-    """Return refreshed process-environment metrics for the right-side resource drawer."""
+    """Return current system, storage and transcoding-capability data for the resource drawer."""
     import psutil
 
     def read_limit(paths):
@@ -641,6 +647,37 @@ def resource_metrics():
                         return number
             except (OSError, ValueError):
                 continue
+        return None
+
+    def disk_metrics(path):
+        try:
+            usage = psutil.disk_usage(path)
+            return {
+                "available": True,
+                "percent": round(usage.percent, 1),
+                "free_gb": round(usage.free / (1024 ** 3), 1),
+                "path": path,
+            }
+        except (OSError, TypeError, ValueError):
+            return {"available": False, "percent": None, "free_gb": None, "path": path}
+
+    def cpu_temperature():
+        try:
+            temperatures = psutil.sensors_temperatures()
+        except (AttributeError, OSError, RuntimeError):
+            return None
+        for group_name in ("coretemp", "cpu_thermal", "k10temp"):
+            for sensor in temperatures.get(group_name, ()):
+                current = getattr(sensor, "current", None)
+                if current is not None:
+                    return round(float(current), 1)
+        for group_name, sensors in temperatures.items():
+            if "cpu" not in group_name.lower():
+                continue
+            for sensor in sensors:
+                current = getattr(sensor, "current", None)
+                if current is not None:
+                    return round(float(current), 1)
         return None
 
     memory = psutil.virtual_memory()
@@ -662,11 +699,33 @@ def resource_metrics():
         memory_percent = round(memory.percent, 1)
         scope = "runtime memory view; container limit not detected"
 
+    server = SystemInfo.query.filter_by(id="1").first()
+    now = time.monotonic()
+    if (_RESOURCE_HW_SUPPORT_CACHE["value"] is None
+            or now - _RESOURCE_HW_SUPPORT_CACHE["updated_at"] >= _RESOURCE_HW_SUPPORT_CACHE_SECONDS):
+        try:
+            _RESOURCE_HW_SUPPORT_CACHE["value"] = check_hw_transcode_support()
+        except Exception:
+            app.logger.exception("Unable to refresh hardware transcoding support")
+            if _RESOURCE_HW_SUPPORT_CACHE["value"] is None:
+                _RESOURCE_HW_SUPPORT_CACHE["value"] = {
+                    "intel": False, "nvidia": False, "amd": False
+                }
+        _RESOURCE_HW_SUPPORT_CACHE["updated_at"] = now
+
     return jsonify({
+        "system_name": getattr(server, "name", None) or cfg.arm_config.get("ARM_NAME") or "ARM Server",
+        "system_description": getattr(server, "description", None)
+                              or "Automatic Ripping Machine main server",
+        "cpu_model": getattr(server, "cpu", None) or platform.processor() or "Unavailable",
+        "cpu_temp_c": cpu_temperature(),
         "cpu_percent": round(psutil.cpu_percent(interval=0.1), 1),
         "memory_used_gb": round(used_bytes / (1024 ** 3), 2),
         "memory_available_gb": round(available_bytes / (1024 ** 3), 2),
         "memory_percent": memory_percent,
         "memory_total_gb": round(total_bytes / (1024 ** 3), 2),
+        "storage_transcode": disk_metrics(cfg.arm_config.get("TRANSCODE_PATH", "")),
+        "storage_completed": disk_metrics(cfg.arm_config.get("COMPLETED_PATH", "")),
+        "hw_support": _RESOURCE_HW_SUPPORT_CACHE["value"],
         "scope": scope,
     })
