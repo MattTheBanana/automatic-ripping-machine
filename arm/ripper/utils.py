@@ -80,6 +80,10 @@ class DriveSleepWatchdog(threading.Thread):
 
     def _is_reading_from_drive(self):
         """Return true only while a job is expected to read its optical disc."""
+        # MakeMKV may eject the disc just before entering the local-file transcode
+        # phase. That is an expected transition, not a user cancellation.
+        if bool(getattr(self.job, "ejected", False)):
+            return False
         disctype = str(getattr(self.job, "disctype", "") or "").lower()
         status = str(getattr(self.job, "status", "") or "").lower()
         if disctype == "music":
