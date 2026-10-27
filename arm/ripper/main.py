@@ -164,7 +164,13 @@ def main():
     # Type: Data
     elif job.disctype == "data":
         logging.info("Disc identified as data")
-        if utils.rip_data(job):
+        drive_watchdog = utils.DriveSleepWatchdog(job, direct_drive_source=True)
+        drive_watchdog.start()
+        try:
+            data_ripped = utils.rip_data(job)
+        finally:
+            drive_watchdog.stop()
+        if data_ripped:
             utils.notify(job, constants.NOTIFY_TITLE, f"Data disc: {job.label} copying complete. ")
         else:
             logging.critical("Data rip failed.  See previous errors.  Exiting.")
