@@ -209,11 +209,15 @@ function buildProgressHealth(job) {
     const age = job.progress_age_seconds === null || job.progress_age_seconds === undefined
         ? NaN : Number(job.progress_age_seconds);
     if (!Number.isFinite(age) || !job.progress_activity_source) return "";
-    const source = escapeHtml(job.progress_activity_source);
+    const source = String(job.progress_activity_source);
+    const isMakeMKVLog = /makemkv.*progress log/i.test(source);
+    const sourceLabel = isMakeMKVLog && hasDisplayValue(job.logfile)
+        ? `<a href="logs?logfile=${encodeURIComponent(job.logfile)}&amp;mode=full">MakeMKV progress log</a>`
+        : escapeHtml(source);
     return `<div id="jobId${job.job_id}_progress_health" class="arm-progress-health"
                  data-progress-age-seconds="${Math.max(0, Math.floor(age))}" data-stale-threshold="120"
-                 data-progress-source="${source}">
-        <span>Last update to ${source}: <strong class="arm-progress-age">${formatActivityAge(age)}</strong> ago.</span>
+                 data-progress-source="${escapeHtml(source)}">
+        <span>Last update to ${sourceLabel}: <strong class="arm-progress-age">${formatActivityAge(age)}</strong> ago.</span>
         <span class="arm-progress-warning-message"></span>
     </div>`;
 }
