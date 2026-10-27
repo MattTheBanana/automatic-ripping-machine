@@ -632,7 +632,7 @@ def update_sysinfo():
 
 @route_settings.route('/resource_metrics')
 @login_required
-def resource_metrics():
+def resource_metrics():  # noqa: C901
     """Return current system, storage and transcoding-capability data for the resource drawer."""
     import psutil
 
@@ -664,7 +664,7 @@ def resource_metrics():
     def cpu_temperature():
         try:
             temperatures = psutil.sensors_temperatures()
-        except (AttributeError, OSError, RuntimeError):
+        except (AttributeError, NotImplementedError, OSError, RuntimeError):
             return None
         for group_name in ("coretemp", "cpu_thermal", "k10temp"):
             for sensor in temperatures.get(group_name, ()):
@@ -715,8 +715,10 @@ def resource_metrics():
 
     return jsonify({
         "system_name": getattr(server, "name", None) or cfg.arm_config.get("ARM_NAME") or "ARM Server",
-        "system_description": getattr(server, "description", None)
-                              or "Automatic Ripping Machine main server",
+        "system_description": (
+            getattr(server, "description", None)
+            or "Automatic Ripping Machine main server"
+        ),
         "cpu_model": getattr(server, "cpu", None) or platform.processor() or "Unavailable",
         "cpu_temp_c": cpu_temperature(),
         "cpu_percent": round(psutil.cpu_percent(interval=0.1), 1),
