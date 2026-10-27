@@ -40,9 +40,12 @@ _GENERIC_DISC_TITLES = {
     "video dvd", "video ts", "audio ts", "blu ray", "bluray", "bd video",
     "blu ray disc", "blu ray video", "dvdrom", "dvd rom", "cd", "cdrom", "cd rom",
     "vcd", "iso", "isoimage", "iso image", "disc", "disk", "disc title", "disk title",
-    "optical disc", "optical disk", "title", "movie", "film", "data", "data disc",
-    "volume", "volume label", "track", "no title", "no name", "no disc", "blank",
-    "default", "generic", "new volume",
+    "disc label", "disk label", "unknown title", "unknown video", "unknown disc",
+    "unknown disk", "unknown volume", "unidentified title", "unidentified video",
+    "untitled disc", "untitled movie", "video disc", "optical media", "optical disc",
+    "optical disk", "title", "movie", "film", "data", "data disc", "volume",
+    "volume label", "track", "no title", "no name", "no disc", "blank", "default",
+    "generic", "new volume",
 }
 
 
