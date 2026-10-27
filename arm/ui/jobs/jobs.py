@@ -355,7 +355,10 @@ def updatetitle():
         flash("A title is required", "danger")
         return redirect(url_for("route_jobs.title_search", job_id=job_id))
     if is_generic_disc_title(title):
-        flash("That looks like a generic disc label, not a media title. Enter a real title or choose a search result.", "danger")
+        flash(
+            "That looks like a generic disc label, not a media title. "
+            "Enter a real title or choose a search result.", "danger"
+        )
         return redirect(url_for("route_jobs.title_search", job_id=job_id))
     new_title = ui_utils.clean_for_filename(title)
     new_year = request.args.get("year") or None
