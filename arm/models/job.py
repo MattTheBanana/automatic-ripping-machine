@@ -310,6 +310,13 @@ class Job(db.Model):
             logging.warning("No drive was backpopulated with this job!")
             return
 
+        if getattr(self, "_arm_abort_reason", None):
+            # The user may have already closed the tray while the reader was shutting
+            # down. Leave its current state alone during cancellation cleanup.
+            logging.info("Leaving tray state unchanged after cancelled read on %s", self.devpath)
+            self.drive.release_current_job()
+            return
+
         # A user may have opened the tray to cancel a read. Do not toggle it closed
         # during failure cleanup; just release the terminal job's drive association.
         try:
