@@ -166,7 +166,7 @@ function makeMKVProgressMarkup(job) {
     );
     x += progressBarMarkup(
         job, "current_title_progress", "Current title",
-        job.current_title || "Current title", job.current_title_progress_round ?? job.progress_round
+        job.current_title || "Current title", job.current_title_progress_round !== undefined ? job.current_title_progress_round : job.progress_round
     );
     x += `<div id="jobId${job.job_id}_eta"><strong>ETA for current title: </strong>${escapeHtml(job.eta || "Unknown")}</div>`;
     return x;
