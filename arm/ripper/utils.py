@@ -187,6 +187,31 @@ class DriveSleepWatchdog(threading.Thread):
             self.join(timeout=self.check_interval_seconds + 5)
 
 
+def format_failure_notification(context, error, logfile="arm.log", setup=False):
+    """Build a concise failure message and retain a safe, UI-actionable log reference."""
+    context = " ".join(str(context or "unknown disc").split())[:64]
+    logfile = str(logfile or "arm.log").strip()
+    if (not logfile.endswith(".log") or len(logfile) > 96 or "/" in logfile
+            or "\\" in logfile or "[" in logfile or "]" in logfile):
+        logfile = "arm.log"
+
+    detail = " ".join(str(error or "Unknown error").split())
+    prefix = ("Setup failed for " if setup else "Job failed for ") + f"{context}: "
+    normalized_error = detail.lower()
+    if "cds.tray_open" in normalized_error:
+        advice = " The tray is reported open; close it and retry."
+    elif "timed out waiting for drive to be ready" in normalized_error:
+        advice = " Check the disc, tray and drive connection."
+    elif setup:
+        advice = " Check drive setup and connection."
+    else:
+        advice = ""
+    log_action = f" [View log: {logfile}]"
+    detail_limit = max(0, 255 - len(prefix) - len(advice) - len(log_action))
+    detail = detail[:detail_limit].rstrip()
+    return f"{prefix}{detail}{advice}{log_action}"[:256]
+
+
 def notify(job, title: str, body: str):  # noqa: C901
     """
     Send notifications with apprise\n
