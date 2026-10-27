@@ -197,6 +197,18 @@ function updateContents(item, _job, keyString, itemContents) {
  * @param {Class} job     Fresh job pulled from api
  */
 function updateJobItem(oldJob, job) {
+    // Rebuild only when metadata changes the card's overall layout, not on every poll.
+    const metadataLayoutChanged = oldJob.secondary_title !== job.secondary_title ||
+        oldJob.secondary_poster_url !== job.secondary_poster_url ||
+        oldJob.secondary_plot !== job.secondary_plot ||
+        oldJob.plot !== job.plot;
+    if (metadataLayoutChanged) {
+        const card = document.getElementById(`jobId${job.job_id}`);
+        if (card && card.parentNode) {
+            card.outerHTML = addJobItem(job, job.authenticated === true);
+            return;
+        }
+    }
     const cardHeader = $(`#jobId${job.job_id}_header`);
     const posterUrl = $(`#jobId${job.job_id}_poster_url`);
     const status = $(`#jobId${job.job_id}_status`);
@@ -336,6 +348,7 @@ function refreshJobsSuccess(data, serverIndex, serverUrl, serverCount) {
         job.job_id = `${serverIndex}_${job.job_id}`;
         job.ripper = (data.arm_name ? data.arm_name : "");
         job.server_url = serverUrl;
+        job.authenticated = data.authenticated === true;
         job.active = true;
         if (activeJobs.some(e => e.job_id === job.job_id)) {
             var oldJob = activeJobs.find(e => e.job_id === job.job_id);
