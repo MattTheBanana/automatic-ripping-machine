@@ -199,12 +199,20 @@ function updateContents(item, _job, keyString, itemContents) {
  * @param {Class} job     Fresh job pulled from api
  */
 function updateJobItem(oldJob, job) {
-    // Rebuild only when metadata changes the card's overall layout, not on every poll.
+    // Rebuild a double-feature card when either feature's visible metadata changes.
+    const hasDoubleFeature = hasDisplayValue(oldJob.secondary_title) || hasDisplayValue(job.secondary_title);
     const metadataLayoutChanged = oldJob.secondary_title !== job.secondary_title ||
+        oldJob.secondary_year !== job.secondary_year ||
+        oldJob.secondary_video_type !== job.secondary_video_type ||
         oldJob.secondary_poster_url !== job.secondary_poster_url ||
         oldJob.secondary_plot !== job.secondary_plot ||
-        oldJob.plot !== job.plot;
-    if (metadataLayoutChanged) {
+        oldJob.title !== job.title || oldJob.title_manual !== job.title_manual ||
+        oldJob.year !== job.year || oldJob.video_type !== job.video_type ||
+        oldJob.poster_url !== job.poster_url || oldJob.plot !== job.plot;
+    if (!hasDoubleFeature && oldJob.plot === job.plot && oldJob.secondary_title === job.secondary_title) {
+        // Normal single-title cards are updated incrementally below.
+    }
+    if (hasDoubleFeature && metadataLayoutChanged) {
         const card = document.getElementById(`jobId${job.job_id}`);
         if (card && card.parentNode) {
             card.outerHTML = addJobItem(job, job.authenticated === true);
