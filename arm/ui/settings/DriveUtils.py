@@ -248,6 +248,7 @@ def drives_search():
         )
         yield _fallback_drive_information(devnode)
 
+
 def drives_update(startup=False):
     """
     scan the system for new cd/dvd/Blu-ray drives and update the database
