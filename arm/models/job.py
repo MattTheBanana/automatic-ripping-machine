@@ -302,20 +302,49 @@ class Job(db.Model):
         return return_dict
 
     def eject(self):
-        """Eject disc if it hasn't previously been ejected
-        """
+        """Finish drive cleanup without toggling a tray that is already open."""
         if self.ejected:
             logging.debug("The drive associated with this job has already been ejected.")
             return
         if self.drive is None:
             logging.warning("No drive was backpopulated with this job!")
             return
+
+        if getattr(self, "_arm_abort_reason", None):
+            # The user may have already closed the tray while the reader was shutting
+            # down. Leave its current state alone during cancellation cleanup.
+            logging.info("Leaving tray state unchanged after cancelled read on %s", self.devpath)
+            self.drive.release_current_job()
+            return
+
+        # A user may have opened the tray to cancel a read. Do not toggle it closed
+        # during failure cleanup; just release the terminal job's drive association.
+        try:
+            self.drive.tray_status()
+        except OSError:
+            logging.warning("Unable to read tray state before ejecting %s", self.devpath, exc_info=True)
+        else:
+            if self.drive.open:
+                logging.info("Drive tray is already open on %s; leaving it open.", self.devpath)
+                self.ejected = True
+                self.drive.release_current_job()
+                return
+
         if not cfg.arm_config['AUTO_EJECT']:
             logging.info("Skipping auto eject")
-            self.drive.release_current_job()  # release job without ejecting
+            self.drive.release_current_job()
             return
-        self.drive.eject()
-        self.ejected = True
+
+        try:
+            error = self.drive.eject()
+            if error is not None:
+                logging.warning("Unable to eject %s: %s", self.devpath, error)
+            else:
+                self.ejected = True
+        finally:
+            # Toggling the tray is not itself a job-state transition. Only terminal
+            # cleanup releases the association, and it does so even when eject fails.
+            self.drive.release_current_job()
 
     @hybrid_property
     def finished(self):

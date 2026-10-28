@@ -5,8 +5,11 @@ from unittest.mock import patch
 import arm.ripper.utils as ripper_utils
 from arm.api.json_api import parse_makemkv_progress
 from arm.ripper.arm_ripper import _apply_disc_feature_defaults
+from arm.models.job import Job
 
-from arm.ripper.utils import clean_for_filename, fix_job_title, format_failure_notification
+from arm.ripper.utils import (
+    clean_for_filename, fix_job_title, format_failure_notification, DuplicateRunException
+)
 from arm.ui.utils import clean_for_filename as ui_clean_for_filename
 from arm.media_metadata import parse_media_label, select_best_media_result, title_search_variants
 
@@ -232,6 +235,46 @@ class TestFailureNotificationFormatting(unittest.TestCase):
         message = format_failure_notification("disc", "failed", "../outside.log")
         self.assertIn("[View log: arm.log]", message)
 
+    def test_cancelled_job_uses_cancelled_language(self):
+        message = format_failure_notification(
+            "SHARK_BOY_AND_LAVA_GIRL", "The tray was opened.", "shark-boy.log",
+            outcome="Job cancelled",
+        )
+        self.assertIn("Job cancelled for SHARK_BOY_AND_LAVA_GIRL", message)
+        self.assertTrue(message.endswith("[View log: shark-boy.log]"))
+
+
+class TestCancelledJobCleanup(unittest.TestCase):
+    def test_cancelled_read_releases_job_without_toggling_tray(self):
+        drive = SimpleNamespace(
+            release_current_job=unittest.mock.Mock(),
+            tray_status=unittest.mock.Mock(),
+            eject=unittest.mock.Mock(),
+        )
+        job = SimpleNamespace(
+            ejected=False,
+            drive=drive,
+            devpath="/dev/sr0",
+            _arm_abort_reason="The tray was opened during reading.",
+        )
+        Job.eject(job)
+        drive.release_current_job.assert_called_once_with()
+        drive.tray_status.assert_not_called()
+        drive.eject.assert_not_called()
+
+
+class TestDuplicateRunGuard(unittest.TestCase):
+    def test_duplicate_active_job_raises_benign_exception(self):
+        active_job = SimpleNamespace(
+            job_id=42, status="ripping", devpath="/dev/sr0", pid=123, pid_hash=456
+        )
+        with patch("arm.ripper.utils.db.session.query") as query, \
+                patch("arm.ripper.utils._job_process_is_alive", return_value=True):
+            query.return_value.filter.return_value.all.return_value = [active_job]
+            with self.assertRaises(DuplicateRunException):
+                ripper_utils.duplicate_run_check("/dev/sr0")
+        self.assertEqual(active_job.status, "ripping")
+
 
 class TestDriveSleepWatchdog(unittest.TestCase):
     def make_watchdog(self, status="ripping", disctype="dvd",
@@ -294,12 +337,53 @@ class TestDriveSleepWatchdog(unittest.TestCase):
         self.assertFalse(direct_watchdog._poll_once(now=100))
         self.assertTrue(direct_watchdog._poll_once(now=110))
 
-    def test_music_jobs_are_not_monitored_as_optical_video_reads(self):
+    def test_music_jobs_monitor_active_audio_reads(self):
         watchdog, _job, _snapshot = self.make_watchdog(
             status="ripping", disctype="music", timeout=10
         )
         self.assertFalse(watchdog._poll_once(now=100))
-        self.assertFalse(watchdog._poll_once(now=1000))
+        self.assertTrue(watchdog._poll_once(now=110))
+        self.assertTrue(watchdog._is_reading_from_drive())
+
+    def test_data_disc_is_monitored_only_while_copy_job_is_active(self):
+        watchdog, job, _snapshot = self.make_watchdog(
+            status="active", disctype="data", timeout=10
+        )
+        self.assertTrue(watchdog._is_reading_from_drive())
+        job.ejected = True
+        self.assertFalse(watchdog._is_reading_from_drive())
+
+    def test_expected_auto_eject_disables_tray_open_cancellation(self):
+        watchdog, job, _snapshot = self.make_watchdog(status="ripping", timeout=10)
+        self.assertTrue(watchdog._is_reading_from_drive())
+        job.ejected = True
+        self.assertFalse(watchdog._is_reading_from_drive())
+
+    def test_open_tray_terminates_active_reader_and_records_cancel_reason(self):
+        watchdog, job, _snapshot = self.make_watchdog(status="ripping", timeout=10)
+        job.pid = 12345
+        job.devpath = "/dev/sr0"
+        child_process = SimpleNamespace(terminate=unittest.mock.Mock(), kill=unittest.mock.Mock())
+        parent_process = SimpleNamespace(children=unittest.mock.Mock(return_value=[child_process]))
+        with patch("arm.ripper.utils.os.getpid", return_value=12345), \
+                patch("arm.ripper.utils.psutil.Process", return_value=parent_process), \
+                patch("arm.ripper.utils.psutil.wait_procs", return_value=([child_process], [])) as wait_procs, \
+                patch("arm.ripper.utils.os.kill") as kill:
+            watchdog._abort_for_open_tray()
+        self.assertIn("tray was opened", job._arm_abort_reason.lower())
+        child_process.terminate.assert_called_once_with()
+        wait_procs.assert_called_once()
+        kill.assert_not_called()
+
+    def test_open_tray_falls_back_to_signalling_worker_between_commands(self):
+        watchdog, job, _snapshot = self.make_watchdog(status="ripping", timeout=10)
+        job.pid = 12345
+        with patch("arm.ripper.utils.os.getpid", return_value=12345), \
+                patch("arm.ripper.utils.psutil.Process") as process, \
+                patch("arm.ripper.utils.os.kill") as kill:
+            process.return_value.children.return_value = []
+            watchdog._abort_for_open_tray()
+        kill.assert_called_once_with(12345, ripper_utils.signal.SIGTERM)
 
 
 if __name__ == "__main__":

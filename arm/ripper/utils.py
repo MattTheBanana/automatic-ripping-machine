@@ -8,10 +8,10 @@ import shutil
 import time
 import random
 import re
+import signal
 import threading
 from logging import Logger
 from pathlib import Path, PurePath
-from math import ceil
 
 import bcrypt
 import requests
@@ -53,17 +53,25 @@ def _email_notification_category(title, body):
 
 
 class RipperException(Exception):
-    pass
+    """Base class for handled ripper errors."""
+
+
+class DuplicateRunException(RipperException):
+    """A duplicate udev trigger arrived while this drive already has an active job."""
+
+
+class DriveNotReadyException(RipperException):
+    """The drive has no readable disc or its tray is open; no job was started."""
 
 
 class DriveSleepWatchdog(threading.Thread):
     """Alert when an optical-drive read appears stalled for an extended period.
 
     Linux does not provide a consistent optical-drive sleep indicator. While ARM
-    is actively reading from a DVD/Blu-ray, this watchdog instead watches the
-    job and MakeMKV progress logs for a prolonged lack of activity.
+    is actively reading an optical disc, this watchdog watches the live tray state
+    and source-progress logs for an open tray or a prolonged lack of activity.
     """
-    DEFAULT_CHECK_INTERVAL_SECONDS = 30
+    DEFAULT_CHECK_INTERVAL_SECONDS = 5
     DEFAULT_STALL_TIMEOUT_SECONDS = 600
 
     def __init__(self, job, direct_drive_source=False, check_interval_seconds=None,
@@ -83,12 +91,23 @@ class DriveSleepWatchdog(threading.Thread):
         self._last_snapshot = None
         self._alert_sent = False
         self._error_logged = False
+        self._last_tray_open = None
 
     def _is_reading_from_drive(self):
-        """Return true only while a video job is expected to read its optical disc."""
-        if str(getattr(self.job, "disctype", "") or "").lower() not in ("dvd", "bluray"):
+        """Return true only while a job is expected to read its optical disc."""
+        # MakeMKV may eject the disc just before entering the local-file transcode
+        # phase. That is an expected transition, not a user cancellation.
+        if bool(getattr(self.job, "ejected", False)):
             return False
+        disctype = str(getattr(self.job, "disctype", "") or "").lower()
         status = str(getattr(self.job, "status", "") or "").lower()
+        if disctype == "music":
+            return status == JobState.AUDIO_RIPPING.value
+        if disctype == "data":
+            # Data-copy jobs run this watchdog only for the duration of dd.
+            return status == JobState.IDLE.value
+        if disctype not in ("dvd", "bluray"):
+            return False
         if status == JobState.VIDEO_RIPPING.value:
             return True
         return self.direct_drive_source and status == JobState.TRANSCODE_ACTIVE.value
@@ -98,7 +117,8 @@ class DriveSleepWatchdog(threading.Thread):
         log_dir = str(cfg.arm_config.get("LOGPATH", "") or "")
         status = str(getattr(self.job, "status", "") or "").lower()
         paths = []
-        if status == JobState.VIDEO_RIPPING.value:
+        disctype = str(getattr(self.job, "disctype", "") or "").lower()
+        if status == JobState.VIDEO_RIPPING.value and disctype in ("dvd", "bluray"):
             # Use MakeMKV progress, not generic ARM log chatter, to detect stalled reads.
             job_id = getattr(self.job, "job_id", None)
             if job_id is not None and log_dir:
@@ -117,6 +137,79 @@ class DriveSleepWatchdog(threading.Thread):
             except OSError:
                 snapshot.append((path, None, None))
         return tuple(snapshot)
+
+    def _poll_tray_open(self):
+        """Read the live kernel tray state and log open/closed transitions."""
+        devpath = str(getattr(self.job, "devpath", "") or "")
+        try:
+            with app.app_context():
+                drive = SystemDrives.query.filter_by(mount=devpath).first()
+                if drive is None:
+                    return None
+                drive.tray_status()
+                is_open = bool(drive.open)
+        except Exception:
+            if not self._error_logged:
+                logging.exception("Unable to read tray state for %s", devpath)
+                self._error_logged = True
+            return None
+
+        if self._last_tray_open is not None and is_open != self._last_tray_open:
+            state = "opened" if is_open else "closed"
+            logging.info("Optical drive tray %s: %s", state, devpath)
+        self._last_tray_open = is_open
+        return is_open
+
+    def _abort_for_open_tray(self):
+        """Interrupt a read that can no longer safely continue without the disc."""
+        existing_reason = getattr(self.job, "_arm_abort_reason", None)
+        if existing_reason:
+            return
+        devpath = str(getattr(self.job, "devpath", "") or "unknown drive")
+        reason = (
+            f"Optical drive tray was opened during an active disc read on {devpath}. "
+            "The read was cancelled to avoid continuing with the disc unavailable. "
+            "Close the tray and start a new rip."
+        )
+        # Keep the reason on the shared job object so the main ripper thread can
+        # report a cancellation instead of a generic subprocess failure.
+        self.job._arm_abort_reason = reason
+        logging.error("%s", reason)
+        pid = getattr(self.job, "pid", None)
+        try:
+            if not pid or int(pid) != os.getpid():
+                logging.error(
+                    "Unable to cancel job %s on tray-open event: unexpected process id %s",
+                    getattr(self.job, "job_id", "unknown"), pid,
+                )
+                return
+
+            # Stop the command reading the disc first. Sending SIGTERM only to the
+            # Python parent can leave makemkvcon/HandBrake alive and the drive busy.
+            process = psutil.Process(int(pid))
+            children = process.children(recursive=True)
+            for child in reversed(children):
+                try:
+                    child.terminate()
+                except psutil.NoSuchProcess:
+                    continue
+
+            if children:
+                _gone, still_alive = psutil.wait_procs(children, timeout=2)
+                for child in still_alive:
+                    try:
+                        child.kill()
+                    except psutil.NoSuchProcess:
+                        pass
+            else:
+                # If the open-tray event arrived between commands, interrupt the
+                # main worker so its signal handler can unwind the rip cleanly.
+                os.kill(int(pid), signal.SIGTERM)
+        except (OSError, psutil.Error):
+            logging.exception(
+                "Unable to cancel job %s after its tray was opened",
+                getattr(self.job, "job_id", "unknown"),
+            )
 
     def _poll_once(self, now=None):
         """Return true once when reading has stalled past the configured threshold."""
@@ -170,9 +263,17 @@ class DriveSleepWatchdog(threading.Thread):
             notify(None, title, body)
 
     def run(self):
-        """Poll job activity while the optical drive is expected to be read."""
+        """Poll tray state and progress while the optical drive is expected to be read."""
         while not self._stop_event.wait(self.check_interval_seconds):
             try:
+                if self._is_reading_from_drive():
+                    tray_open = self._poll_tray_open()
+                    if tray_open is True:
+                        self._abort_for_open_tray()
+                        continue
+                else:
+                    self._last_tray_open = None
+
                 if self._poll_once():
                     try:
                         self._send_stall_alert()
@@ -203,7 +304,38 @@ class DriveSleepWatchdog(threading.Thread):
             self.join(timeout=self.check_interval_seconds + 5)
 
 
-def format_failure_notification(context, error, logfile="arm.log", setup=False):
+def detect_open_tray_abort(job):
+    """Return and record a cancellation reason if a failed physical read left its tray open."""
+    existing_reason = getattr(job, "_arm_abort_reason", None)
+    if existing_reason:
+        return existing_reason
+    if getattr(job, "ejected", False):
+        return None
+
+    devpath = str(getattr(job, "devpath", "") or "unknown drive")
+    try:
+        drive = getattr(job, "drive", None)
+        if drive is None:
+            drive = SystemDrives.query.filter_by(mount=devpath).first()
+        if drive is None:
+            return None
+        drive.tray_status()
+        if not drive.open:
+            return None
+    except Exception:
+        logging.debug("Unable to confirm tray state after read failure on %s", devpath, exc_info=True)
+        return None
+
+    reason = (
+        f"Optical drive tray was opened during an active disc read on {devpath}. "
+        "The read was cancelled; close the tray and start a new rip."
+    )
+    job._arm_abort_reason = reason
+    logging.error("%s", reason)
+    return reason
+
+
+def format_failure_notification(context, error, logfile="arm.log", setup=False, outcome="Job failed"):
     """Build a concise failure message and retain a safe, UI-actionable log reference."""
     context = " ".join(str(context or "unknown disc").split())[:64]
     logfile = str(logfile or "arm.log").strip()
@@ -212,7 +344,7 @@ def format_failure_notification(context, error, logfile="arm.log", setup=False):
         logfile = "arm.log"
 
     detail = " ".join(str(error or "Unknown error").split())
-    prefix = ("Setup failed for " if setup else "Job failed for ") + f"{context}: "
+    prefix = ("Setup failed for " if setup else f"{outcome} for ") + f"{context}: "
     normalized_error = detail.lower()
     if "cds.tray_open" in normalized_error:
         advice = " The tray is reported open; close it and retry."
@@ -756,6 +888,9 @@ def rip_music(job, logfile):
             database_updater(args, job)
             return True
         except subprocess.CalledProcessError as ab_error:
+            abort_reason = detect_open_tray_abort(job)
+            if abort_reason:
+                raise RipperException(abort_reason) from ab_error
             err = f"Call to abcde failed with code: {ab_error.returncode} ({ab_error.output})"
             args = {"status": JobState.FAILURE.value, "errors": err}
             database_updater(args, job)
@@ -799,9 +934,19 @@ def rip_data(job):
         logging.info("Data rip call successful")
         success = True
     except subprocess.CalledProcessError as dd_error:
+        abort_reason = detect_open_tray_abort(job)
+        if abort_reason:
+            try:
+                shutil.rmtree(raw_path)
+            except OSError as cleanup_error:
+                logging.warning("Unable to clean cancelled data rip at %s: %s", raw_path, cleanup_error)
+            raise RipperException(abort_reason) from dd_error
         err = f"Data rip failed with code: {dd_error.returncode}({dd_error.output})"
         logging.error(err)
-        os.unlink(incomplete_filename)
+        try:
+            os.unlink(incomplete_filename)
+        except FileNotFoundError:
+            pass
         args = {"status": JobState.FAILURE.value, "errors": err}
         database_updater(args, job)
     try:
@@ -1050,36 +1195,72 @@ def clean_for_filename(string):
     return " ".join(string.strip(" .").split())
 
 
+def _job_process_is_alive(job):
+    """Return whether the recorded PID still belongs to this ARM job process."""
+    pid = getattr(job, "pid", None)
+    if not pid or not psutil.pid_exists(pid):
+        return False
+    try:
+        process = psutil.Process(pid)
+        return hash(process) == getattr(job, "pid_hash", None)
+    except psutil.AccessDenied:
+        # If the container cannot inspect its own recorded process, don't start a duplicate.
+        return True
+    except psutil.NoSuchProcess:
+        return False
+
+
 def duplicate_run_check(dev_path):
-    """
-    Kills this run if another run was triggered recently on the same device\n
-    Some drives will trigger the udev twice causing 1 disc insert to add 2 jobs\n
-    this stops that issue
-    :return: None
-    """
-    # Log running jobs by job status
+    """Ignore duplicate udev launches without treating them as job failures."""
     running_jobs = (
         db.session.query(Job)
-        .filter(
-            ~Job.finished,
-            Job.devpath == dev_path,
-        )
+        .filter(~Job.finished, Job.devpath == dev_path)
         .all()
     )
-    for job in running_jobs:
-        logging.info(f"Device {dev_path}: Job ({job.job_id}) status '{job.status}'")
-    # check for running jobs by associated drive.
+    for active_job in running_jobs:
+        if _job_process_is_alive(active_job):
+            logging.info(
+                "Ignoring duplicate trigger for %s; job %s is already %s.",
+                dev_path, active_job.job_id, active_job.status,
+            )
+            raise DuplicateRunException(
+                f"Duplicate trigger ignored; job {active_job.job_id} is already running on {dev_path}"
+            )
+
+        logging.warning(
+            "Found stale active job %s for %s; marking it failed before retrying.",
+            active_job.job_id, dev_path,
+        )
+        active_job.status = JobState.FAILURE.value
+        active_job.errors = "Ripper process exited before the job reached a finished state."
+        drive_association = SystemDrives.query.filter_by(
+            mount=dev_path, job_id_current=active_job.job_id
+        ).first()
+        if drive_association is not None:
+            drive_association.release_current_job()
+        db.session.commit()
+
+    # Clear stale associations left by a previously completed job. These must not block
+    # a new disc merely because the tray was opened or the UI missed the finishing update.
     drive = SystemDrives.query.filter_by(mount=dev_path).first()
-    if drive is None or not drive.processing:
-        return  # unknown or idle drive is safe to start another run.
-    job = drive.job_current
-    logging.critical(f'Drive {dev_path} has an active Job ({job.job_id}): {job.status}.')
-    # log time
-    job_time = ceil(job.run_time // 60)
-    logging.info(f"Job was started {job_time}min ago.")
-    if (job_time) < 3:
-        logging.info("Job was started less than 3min ago.")
-    raise RipperException(f"Job already running on {dev_path}")
+    if drive is not None and drive.processing:
+        active_job = drive.job_current
+        if active_job is None or active_job.finished:
+            drive.release_current_job()
+            db.session.commit()
+        elif _job_process_is_alive(active_job):
+            logging.info(
+                "Ignoring duplicate trigger for %s; drive is still associated with job %s.",
+                dev_path, active_job.job_id,
+            )
+            raise DuplicateRunException(
+                f"Duplicate trigger ignored; job {active_job.job_id} is already running on {dev_path}"
+            )
+        else:
+            active_job.status = JobState.FAILURE.value
+            active_job.errors = "Ripper process exited before the job reached a finished state."
+            drive.release_current_job()
+            db.session.commit()
 
 
 def save_disc_poster(final_directory, job):

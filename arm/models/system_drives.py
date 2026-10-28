@@ -231,8 +231,6 @@ class SystemDrives(db.Model):  # pylint: disable=too-many-instance-attributes
             arm_subprocess(cmd, check=True)
         except CalledProcessError as err:
             return err.stderr
-        finally:
-            self.release_current_job()
 
     def debug(self, logger=logging):
         """
