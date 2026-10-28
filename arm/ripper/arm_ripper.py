@@ -74,6 +74,17 @@ def _prepare_output_paths(have_dupes, job, type_sub_folder, job_title):
     return transcode_out_path, final_directory, is_special_features, special_marker
 
 
+def _run_makemkv(job):
+    """Run MakeMKV and preserve a tray-open cancellation reason if the read fails."""
+    try:
+        return makemkv.makemkv(job)
+    except Exception as mkv_error:  # noqa: E722
+        abort_reason = utils.detect_open_tray_abort(job)
+        if abort_reason:
+            raise utils.RipperException(abort_reason) from mkv_error
+        raise utils.RipperException("Error while running MakeMKV") from mkv_error
+
+
 def rip_visual_media(have_dupes, job, logfile, protection):
     """
     Main ripping function for dvd and Blu-rays, movies or series
@@ -114,10 +125,7 @@ def rip_visual_media(have_dupes, job, logfile, protection):
         # Run MakeMKV and get path to output
         job.status = JobState.VIDEO_RIPPING.value
         db.session.commit()
-        try:
-            makemkv_out_path = makemkv.makemkv(job)
-        except Exception as mkv_error:  # noqa: E722
-            raise utils.RipperException("Error while running MakeMKV") from mkv_error
+        makemkv_out_path = _run_makemkv(job)
 
         if job.config.NOTIFY_RIP:
             utils.notify(job, constants.NOTIFY_TITLE, f"{job.title} rip complete. Starting transcode. ")

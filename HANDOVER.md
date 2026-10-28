@@ -144,3 +144,9 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 4. Test actual optical hardware: normal DVD/Blu-ray ripping, tray-open cancellation, double-sided media as two separate Side A/Side B jobs, and a real double-feature disc. The shared CI runners do not validate physical drive behavior.
 5. After merge, verify that the custom ARM image publish workflow succeeded and recreate/redeploy the TrueNAS workload with the updated image. An open PR or merged source commit by itself does not update the running container.
 
+## Notification drawer email preferences (2026-10-27)
+
+- The notification slide-out drawer includes persistent switches for email notifications overall, errors, successful completion, and other events. The “other events” category is present because ARM also emits informational events such as disc detection and job-start notifications.
+- Defaults are declared in `setup/arm.yaml`; descriptions are in `arm/ui/comments.json`. The drawer saves changes through the authenticated `/notificationpreferences` endpoint, using the session CSRF token.
+- Email category filtering is applied in `arm/ripper/utils.py` before SMTP/Gmail delivery. Local database notifications, Apprise, and post-processing scripts are unchanged by these email-only preferences. Error wording takes precedence over completion wording when a message mentions both.
+- Focused categorization tests are in `test/unittest/test_notification_preferences.py`. Run them with `PYTHONPATH=. pytest -q test/unittest/test_notification_preferences.py`; runtime tests still need to be run in a project environment.

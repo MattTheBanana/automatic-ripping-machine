@@ -351,6 +351,12 @@ PO_APP_KEY: ""
 BASH_SCRIPT: ""
 
 
+# Email notification preferences, configurable from the notification drawer.
+EMAIL_NOTIFICATIONS_ENABLED: true
+EMAIL_NOTIFY_ERRORS: true
+EMAIL_NOTIFY_COMPLETION: true
+EMAIL_NOTIFY_OTHER: true
+
 # Email notification transport: "none", "smtp", or "gmail_oauth".
 # OAuth remains the default to keep existing installations working.
 EMAIL_NOTIFICATION_METHOD: "gmail_oauth"

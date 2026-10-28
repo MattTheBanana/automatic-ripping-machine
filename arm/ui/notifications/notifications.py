@@ -7,8 +7,12 @@ Covers
 """
 
 from flask_login import login_required  # noqa: F401
-from flask import render_template, Blueprint, redirect, flash, session, jsonify
+from flask import render_template, Blueprint, redirect, flash, session, jsonify, request
 from datetime import datetime
+import importlib
+import os
+
+import arm.config.config as cfg
 
 import arm.ui.utils as ui_utils
 from arm.ui import app, db
@@ -35,7 +39,11 @@ def arm_nav_notify():
         app.logger.debug("Unable to load notifications for drawer", exc_info=True)
 
     return dict(notify_count=notify_count,
-                notifications_for_drawer=notifications_for_drawer)
+                notifications_for_drawer=notifications_for_drawer,
+                email_notification_preferences={key: cfg.arm_config.get(key, True) for key in (
+                    "EMAIL_NOTIFICATIONS_ENABLED", "EMAIL_NOTIFY_ERRORS",
+                    "EMAIL_NOTIFY_COMPLETION", "EMAIL_NOTIFY_OTHER"
+                )})
 
 
 @route_notifications.route('/notificationview')
@@ -102,3 +110,34 @@ def arm_notification_clear():
         db.session.rollback()
         app.logger.exception("Unable to clear notifications from drawer")
         return jsonify({"success": False, "message": "Unable to clear notifications"}), 500
+
+
+@route_notifications.route('/notificationpreferences', methods=['POST'])
+@login_required
+def arm_notification_preferences():
+    """Persist email notification preferences changed in the notification drawer."""
+    allowed = {
+        "EMAIL_NOTIFICATIONS_ENABLED",
+        "EMAIL_NOTIFY_ERRORS",
+        "EMAIL_NOTIFY_COMPLETION",
+        "EMAIL_NOTIFY_OTHER",
+    }
+    payload = request.get_json(silent=True) or {}
+    key = payload.get("key")
+    if key not in allowed or not isinstance(payload.get("enabled"), bool):
+        return jsonify({"success": False, "message": "Invalid notification preference"}), 400
+    if not os.access(cfg.arm_config_path, os.W_OK):
+        return jsonify({"success": False, "message": "ARM configuration is read-only"}), 403
+
+    updated_config = {name: str(value) for name, value in cfg.arm_config.items()}
+    updated_config[key] = "true" if payload["enabled"] else "false"
+    try:
+        comments = ui_utils.generate_comments()
+        rendered_config = ui_utils.build_arm_cfg(updated_config, comments)
+        with open(cfg.arm_config_path, "w", encoding="utf-8") as settings_file:
+            settings_file.write(rendered_config)
+        importlib.reload(cfg)
+        return jsonify({"success": True, "key": key, "enabled": cfg.arm_config.get(key, True)})
+    except OSError:
+        app.logger.exception("Unable to save notification preferences")
+        return jsonify({"success": False, "message": "Unable to save notification preferences"}), 500
