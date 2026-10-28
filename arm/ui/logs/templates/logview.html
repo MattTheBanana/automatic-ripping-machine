@@ -3,9 +3,8 @@
 {% block content %}
 <h4>Loading log: {{ file }}...</h4>
 <div id="container">
-
     <div id="log">
-        <pre id="{{ file }}" ></pre>
+        <pre id="log-output" class="arm-log-output" tabindex="0" aria-label="Log output"></pre>
     </div>
 </div>
 {% endblock %}
@@ -13,7 +12,10 @@
 {% block js %}
 {{ super() }}
 <script>
-    const output = document.getElementById('{{ file }}');
+    const output = document.getElementById('log-output');
+    const followTail = {% if mode == 'tail' %}true{% else %}false{% endif %};
+    let displayedText = '';
+    let firstUpdate = true;
 
     const xhr = new XMLHttpRequest();
     {% if mode == 'tail' or mode == 'full' %}
@@ -21,16 +23,50 @@
     {% else %}
         xhr.open('GET', '/logreader?logfile={{ file }}&mode={{ mode }}&json=1{% if source == 'progress' %}&source=progress{% endif %}');
     {% endif %}
-    xhr.open
+
+    function updateLogOutput() {
+        const newText = xhr.responseText || '';
+        if (newText === displayedText) {
+            return;
+        }
+
+        const selection = window.getSelection();
+        const hasSelection = selection && !selection.isCollapsed;
+        const isAtBottom = window.innerHeight + window.scrollY >=
+            document.documentElement.scrollHeight - 64;
+        const shouldFollowTail = followTail &&
+            (firstUpdate || (isAtBottom && !hasSelection));
+
+        if (newText.startsWith(displayedText)) {
+            const newContent = newText.slice(displayedText.length);
+            if (newContent) {
+                if (output.firstChild && output.firstChild.nodeType === Node.TEXT_NODE) {
+                    output.firstChild.appendData(newContent);
+                } else {
+                    output.appendChild(document.createTextNode(newContent));
+                }
+            }
+        } else {
+            // A truncated or rotated log no longer has the displayed text as its prefix.
+            output.textContent = newText;
+        }
+
+        displayedText = newText;
+        firstUpdate = false;
+
+        if (shouldFollowTail) {
+            window.scrollTo(0, document.documentElement.scrollHeight);
+        }
+    }
+
+    // Append streamed chunks rather than replacing the whole log, preserving selections.
+    xhr.onprogress = updateLogOutput;
+    xhr.onload = updateLogOutput;
+    xhr.onerror = function() {
+        if (!displayedText) {
+            output.textContent = 'Unable to load the log. Please try again.';
+        }
+    };
     xhr.send();
-
-    setInterval(function() {
-        output.textContent = xhr.responseText;
-        {% if mode == 'tail' %}
-            window.scrollTo(0, document.querySelector("#content").scrollHeight);
-        {% endif %}
-    }, 1000);
-
 </script>
 {% endblock %}
-
