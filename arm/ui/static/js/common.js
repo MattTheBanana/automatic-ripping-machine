@@ -95,6 +95,9 @@ function buildDiscMetadataBadges(job) {
     const last = positiveNumber(job.episode_end);
     if (season) badges.push(`<span class="arm-job-metadata-badge">Season ${String(season).padStart(2, "0")}</span>`);
     if (disc) badges.push(`<span class="arm-job-metadata-badge">Disc ${disc}</span>`);
+    const side = String(job.disc_side || "").trim().toUpperCase();
+    if (side === "A" || side === "B") badges.push(`<span class="arm-job-metadata-badge">Side ${side}</span>`);
+    if (hasDisplayValue(job.secondary_title)) badges.push('<span class="arm-job-metadata-badge arm-job-double-feature-badge">Double feature</span>');
     if (first && last) {
         const range = first === last ? String(first).padStart(2, "0")
             : `${String(first).padStart(2, "0")}–${String(last).padStart(2, "0")}`;
@@ -118,21 +121,30 @@ function getRipperName(job, idsplit) {
 }
 
 function addJobItem(job, authenticated) {
-    // Local server or remote.
     const idsplit = String(job.job_id || "").split("_");
-    let x = `<div class="col-md-6 col-xl-4 arm-job-column" id="jobId${job.job_id}">`;
-    x += `<div class="card arm-job-card mx-auto">`;
-    x += `<div class="card-header text-center arm-job-card-header"><strong id="jobId${job.job_id}_header">${titleManual(job)}</strong></div>`;
-    x += `<div class="row no-gutters arm-job-card-content">`;
     if (idsplit[1] === undefined) {
-        x += `<div class="arm-job-poster-column"><a href="/jobdetail?job_id=${job.job_id}">${posterCheck(job)}</a></div>`;
-    } else {
-        x += `<div class="arm-job-poster-column"><a href="${job.server_url}/jobdetail?job_id=${idsplit[1]}">${posterCheck(job)}</a></div>`;
+        idsplit[0] = "0";
+        idsplit[1] = job.job_id;
     }
-    x += buildMiddleSection(job);
-    x += buildRightSection(job, idsplit, authenticated);
-    // Close the content row, card, and outer grid column.
-    x += "</div></div></div>";
+    const serverJob = idsplit[0] !== "0";
+    const detailUrl = serverJob
+        ? `${job.server_url}/jobdetail?job_id=${encodeURIComponent(idsplit[1])}`
+        : `/jobdetail?job_id=${encodeURIComponent(idsplit[1])}`;
+    const doubleFeature = hasDisplayValue(job.secondary_title);
+    let x = `<div class="col-md-6 col-xl-4 arm-job-column" id="jobId${job.job_id}">`;
+    x += `<div class="card arm-job-card mx-auto${doubleFeature ? " arm-job-card-double-feature" : ""}">`;
+    x += `<div class="card-header text-center arm-job-card-header"><strong id="jobId${job.job_id}_header">${escapeHtml(titleManual(job))}</strong></div>`;
+    if (doubleFeature) {
+        x += `<div class="arm-job-double-feature-media">${featureSummaryMarkup(job, false)}${featureSummaryMarkup(job, true)}</div>`;
+        x += `<div class="arm-job-double-feature-details">${buildMiddleSection(job)}${buildRightSection(job, idsplit, authenticated)}</div>`;
+        x += `<div class="arm-job-double-feature-actions">${buildJobActions(job, idsplit, authenticated, serverJob)}</div>`;
+    } else {
+        x += `<div class="row no-gutters arm-job-card-content">`;
+        x += `<div class="arm-job-poster-column"><a href="${detailUrl}">${posterCheck(job)}</a>${buildJobActions(job, idsplit, authenticated, serverJob)}</div>`;
+        x += `<div class="arm-job-details-column">${buildMiddleSection(job)}${buildRightSection(job, idsplit, authenticated)}</div>`;
+        x += "</div>";
+    }
+    x += "</div></div>";
     return x;
 }
 
@@ -197,11 +209,16 @@ function buildProgressHealth(job) {
     const age = job.progress_age_seconds === null || job.progress_age_seconds === undefined
         ? NaN : Number(job.progress_age_seconds);
     if (!Number.isFinite(age) || !job.progress_activity_source) return "";
-    const source = escapeHtml(job.progress_activity_source);
+    const source = String(job.progress_activity_source);
+    const isMakeMKVLog = /makemkv.*progress log/i.test(source);
+    const progressLogfile = String(job.progress_logfile || "").trim();
+    const sourceLabel = isMakeMKVLog && /^\d+\.log$/.test(progressLogfile)
+        ? `<a href="logs?logfile=${encodeURIComponent(progressLogfile)}&amp;mode=full&amp;source=progress">MakeMKV progress log</a>`
+        : escapeHtml(source);
     return `<div id="jobId${job.job_id}_progress_health" class="arm-progress-health"
                  data-progress-age-seconds="${Math.max(0, Math.floor(age))}" data-stale-threshold="120"
-                 data-progress-source="${source}">
-        <span>Last update to ${source}: <strong class="arm-progress-age">${formatActivityAge(age)}</strong> ago.</span>
+                 data-progress-source="${escapeHtml(source)}" data-progress-logfile="${escapeHtml(progressLogfile)}">
+        <span>Last update to ${sourceLabel}: <strong class="arm-progress-age">${formatActivityAge(age)}</strong> ago.</span>
         <span class="arm-progress-warning-message"></span>
     </div>`;
 }
@@ -210,17 +227,25 @@ function updateProgressHealth(container, job) {
     if (!container) return;
     const age = job.progress_age_seconds === null || job.progress_age_seconds === undefined
         ? NaN : Number(job.progress_age_seconds);
+    const source = String(job.progress_activity_source || "");
+    const progressLogfile = String(job.progress_logfile || "").trim();
     let node = document.getElementById(`jobId${job.job_id}_progress_health`);
-    if (!Number.isFinite(age) || !job.progress_activity_source) {
+    if (!Number.isFinite(age) || !source) {
         if (node) node.remove();
         return;
+    }
+    if (node && (node.dataset.progressSource !== source ||
+            node.dataset.progressLogfile !== progressLogfile)) {
+        node.remove();
+        node = null;
     }
     if (!node) {
         container.insertAdjacentHTML("beforeend", buildProgressHealth(job));
         node = document.getElementById(`jobId${job.job_id}_progress_health`);
     }
     if (!node) return;
-    node.dataset.progressSource = String(job.progress_activity_source);
+    node.dataset.progressSource = source;
+    node.dataset.progressLogfile = progressLogfile;
     renderProgressHealthNode(node, age);
 }
 
@@ -278,40 +303,66 @@ function musicCheck(job, idsplit) {
     return x;
 }
 
+function hasDisplayValue(value) {
+    const normalized = String(value === null || value === undefined ? "" : value).trim().toLowerCase();
+    return normalized !== "" && !["none", "null", "undefined", "n/a"].includes(normalized);
+}
+
+function posterMarkup(url, alt, imageId, className) {
+    const source = hasDisplayValue(url) ? String(url) : "/static/img/none.png";
+    return `<img id="${imageId}" alt="${escapeHtml(alt)}" src="${escapeHtml(source)}" class="img-thumbnail ${className}" loading="lazy">`;
+}
+
 function posterCheck(job) {
-    let image;
-    if (job.poster_url !== "None" && job.poster_url !== "N/A") {
-        return `<img id="jobId${job.job_id}_poster_url" alt="Poster thumbnail" src="${job.poster_url}" class="img-thumbnail arm-job-poster" loading="lazy">`;
-    }
-    image = job.video_type === "Music" ? "music.png" : "none.png";
-    return `<img id="jobId${job.job_id}_poster_url" alt="No poster available" src="/static/img/${image}" class="img-thumbnail arm-job-poster" loading="lazy">`;
+    const hasPoster = hasDisplayValue(job.poster_url);
+    const fallback = String(job.video_type || "").toLowerCase() === "music" ? "/static/img/music.png" : "/static/img/none.png";
+    return posterMarkup(hasPoster ? job.poster_url : fallback,
+        hasPoster ? `Poster for ${job.title || "media"}` : "No poster available",
+        `jobId${job.job_id}_poster_url`, "arm-job-poster");
+}
+
+function featureSummaryMarkup(job, secondary) {
+    const title = secondary ? job.secondary_title : job.title;
+    const year = secondary ? job.secondary_year : job.year;
+    const type = secondary ? job.secondary_video_type : job.video_type;
+    const poster = secondary ? job.secondary_poster_url : job.poster_url;
+    const plot = secondary ? job.secondary_plot : job.plot;
+    const imageId = secondary ? `jobId${job.job_id}_secondary_poster_url` : `jobId${job.job_id}_poster_url`;
+    const titleId = secondary ? `jobId${job.job_id}_secondary_title` : `jobId${job.job_id}_feature_a_title`;
+    const label = secondary ? "Feature B" : "Feature A";
+    return `<article class="arm-job-feature-summary" aria-label="${label}">
+        <div class="arm-job-feature-label">${label}</div>
+        ${posterMarkup(poster, `Poster for ${title || label}`, imageId, "arm-job-feature-poster")}
+        <h3 id="${titleId}" class="arm-job-feature-title">${escapeHtml(hasDisplayValue(title) ? title : "Title not set")}</h3>
+        <div class="arm-job-feature-subtitle">${escapeHtml(type || "Media")}${hasDisplayValue(year) ? ` · ${escapeHtml(year)}` : ""}</div>
+        <p class="arm-job-feature-plot">${escapeHtml(hasDisplayValue(plot) ? plot : "No plot available.")}</p>
+    </article>`;
 }
 
 function titleManual(job) {
     const manualTitle = job.title_manual && job.title_manual !== "None" ? job.title_manual : job.title;
-    const title = manualTitle && manualTitle !== "None" ? manualTitle : "Unknown title";
-    const year = job.year && job.year !== "None" ? ` (${job.year})` : "";
-    return `${title}${year}`;
+    const rawTitle = hasDisplayValue(manualTitle) ? String(manualTitle).trim() : "";
+    const title = ["undefined", "unknown", "not identified", "video", "dvd", "disc", "disk", "untitled"].includes(rawTitle.toLowerCase())
+        ? "Title not set" : (rawTitle || "Title not set");
+    const year = hasDisplayValue(job.year) ? ` (${job.year})` : "";
+    const secondTitle = hasDisplayValue(job.secondary_title) ? String(job.secondary_title).trim() : "";
+    const secondYear = hasDisplayValue(job.secondary_year) ? ` (${job.secondary_year})` : "";
+    return `${title}${year}${secondTitle ? ` + ${secondTitle}${secondYear}` : ""}`;
 }
 
 function buildMiddleSection(job) {
     let x = "<div class=\"arm-job-info-column\"><div class=\"card-body px-2 py-2\">";
-    x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${job.year || "—"}</div>`;
-    x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${mediaTypeLabel(job.video_type)}</div>`;
+    x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${escapeHtml(job.year || "—")}</div>`;
+    x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${escapeHtml(mediaTypeLabel(job.video_type))}</div>`;
     x += `<div id="jobId${job.job_id}_devpath"><strong>Device: </strong>${escapeHtml(job.display_device || job.devpath || "—")}</div>`;
     x += `<div id="jobId${job.job_id}_disc_metadata" class="arm-job-metadata">${buildDiscMetadataBadges(job)}</div>`;
-    x += `<div><strong>Status: </strong><img id="jobId${job.job_id}_status" class="arm-job-status-icon" src="/static/img/${job.status}.png" width="20" height="20" alt="${job.status}" title="${job.status}"></div>`;
+    x += `<div><strong>Status: </strong><img id="jobId${job.job_id}_status" class="arm-job-status-icon" src="/static/img/${escapeHtml(job.status)}.png" width="20" height="20" alt="${escapeHtml(job.status)}" title="${escapeHtml(job.status)}"></div>`;
     x += `<div id="jobId${job.job_id}_progress_section">${transcodingCheck(job)}</div>`;
     x += "</div></div>";
     return x;
 }
 
-function buildRightSection(job, idsplit, authenticated) {
-    // idsplit[1] is undefined on the database page; use its local job identifier.
-    if (idsplit[1] === undefined) {
-        idsplit[0] = "0";
-        idsplit[1] = job.job_id;
-    }
+function buildRightSection(job, idsplit) {
     const config = job.config && typeof job.config === "object" ? job.config : {};
     const settings = job.card_settings && typeof job.card_settings === "object" ? job.card_settings : {};
     const visibilityKeys = [
@@ -320,21 +371,25 @@ function buildRightSection(job, idsplit, authenticated) {
     ];
     const anyConfigVisible = visibilityKeys.some(key => settings[key] !== false);
     const fieldDisplay = key => settings[key] === false ? ' style="display:none;"' : "";
-    let x = `<div class="arm-job-actions-column"><div class="card-body px-2 py-2 arm-job-config"${anyConfigVisible ? "" : ' style="display:none;"'}>`;
-    x += `<div id="jobId${job.job_id}_RIPPER"${fieldDisplay("show_job_ripper")}><strong>Ripper: </strong>${getRipperName(job, idsplit)}</div>`;
-    x += `<div id="jobId${job.job_id}_RIPMETHOD"${fieldDisplay("show_job_rip_method")}><strong>Rip Method: </strong>${config.RIPMETHOD || "—"}</div>`;
-    x += `<div id="jobId${job.job_id}_MAINFEATURE"${fieldDisplay("show_job_main_feature")}><strong>Main Feature: </strong>${config.MAINFEATURE || "False"}</div>`;
-    x += `<div id="jobId${job.job_id}_MINLENGTH"${fieldDisplay("show_job_min_length")}><strong>Min Length: </strong>${config.MINLENGTH || "0"}</div>`;
-    x += `<div id="jobId${job.job_id}_MAXLENGTH"${fieldDisplay("show_job_max_length")}><strong>Max Length: </strong>${config.MAXLENGTH || "—"}</div>`;
-    x += "</div><div class=\"card-body px-2 py-1 arm-job-actions\">";
-    if (authenticated === true) {
-        x += `<div class="btn-group-vertical w-100" role="group" aria-label="Job actions" ${idsplit[0] !== "0" ? "style=\"display: none;\"" : ""}>`;
-        x += `<button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${idsplit[1]}" data-href="json?job=${idsplit[1]}&mode=abandon">Abandon Job</button>`;
-        x += `<a href="logs?logfile=${job.logfile}&mode=full" class="btn btn-primary">View logfile</a>`;
-        x += musicCheck(job, idsplit);
-        x += `<button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="fixperms" data-jobid="${idsplit[1]}" data-href="json?mode=fixperms&job=${idsplit[1]}">Fix Permissions</button>`;
-        x += "</div>";
-    }
+    let x = `<div class="arm-job-actions-column"><div class="card-body px-2 py-1 arm-job-config"${anyConfigVisible ? "" : ' style="display:none;"'}>`;
+    x += `<div id="jobId${job.job_id}_RIPPER"${fieldDisplay("show_job_ripper")}><strong>Ripper: </strong>${escapeHtml(getRipperName(job, idsplit))}</div>`;
+    x += `<div id="jobId${job.job_id}_RIPMETHOD"${fieldDisplay("show_job_rip_method")}><strong>Rip Method: </strong>${escapeHtml(config.RIPMETHOD || "—")}</div>`;
+    x += `<div id="jobId${job.job_id}_MAINFEATURE"${fieldDisplay("show_job_main_feature")}><strong>Main Feature: </strong>${escapeHtml(config.MAINFEATURE || "False")}</div>`;
+    x += `<div id="jobId${job.job_id}_MINLENGTH"${fieldDisplay("show_job_min_length")}><strong>Min Length: </strong>${escapeHtml(config.MINLENGTH || "0")}</div>`;
+    x += `<div id="jobId${job.job_id}_MAXLENGTH"${fieldDisplay("show_job_max_length")}><strong>Max Length: </strong>${escapeHtml(config.MAXLENGTH || "—")}</div>`;
+    x += "</div></div>";
+    return x;
+}
+
+function buildJobActions(job, idsplit, authenticated, serverJob) {
+    if (authenticated !== true) return "";
+    const hidden = serverJob ? ' style="display:none;"' : "";
+    const jobId = encodeURIComponent(idsplit[1]);
+    let x = `<div class="arm-job-actions"><div class="btn-group-vertical w-100" role="group" aria-label="Job actions"${hidden}>`;
+    x += `<button type="button" class="btn btn-danger" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${jobId}" data-cardid="${escapeHtml(job.job_id)}" data-href="json?job=${jobId}&mode=abandon">Abandon Job</button>`;
+    x += `<a href="logs?logfile=${encodeURIComponent(job.logfile || "")}&mode=full" class="btn btn-outline-primary">View logfile</a>`;
+    x += musicCheck(job, idsplit);
+    x += `<button type="button" class="btn btn-outline-secondary" data-toggle="modal" data-target="#exampleModal" data-type="fixperms" data-jobid="${jobId}" data-href="json?mode=fixperms&job=${jobId}">Fix Permissions</button>`;
     x += "</div></div>";
     return x;
 }

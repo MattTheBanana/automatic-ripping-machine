@@ -811,31 +811,194 @@ img, video, canvas, iframe { max-width: 100%; }
   .arm-toast-holder { right: .5rem; width: calc(100vw - 1rem); }
 }
 
-/* Keep the notification drawer content-height instead of leaving a tall blank tail. */
-.arm-notification-drawer {
-  top: auto;
-  bottom: 1rem;
-  height: auto;
-  max-height: calc(100vh - 2rem);
-  max-height: calc(100dvh - 2rem);
+
+/* Compact active-rip cards: a larger poster with actions directly beneath it. */
+.arm-job-card-content {
+  display: grid;
+  grid-template-columns: minmax(145px, 35%) minmax(0, 1fr);
+  gap: .2rem;
+  align-items: start;
+}
+.arm-job-poster-column {
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  padding: .75rem .45rem;
+}
+.arm-job-poster {
+  width: 100%;
+  max-width: 190px;
+  max-height: 285px;
+}
+.arm-job-details-column {
+  flex: none;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+.arm-job-info-column,
+.arm-job-actions-column {
+  flex: none;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+.arm-job-info-column .card-body { padding: .65rem .55rem !important; }
+.arm-job-actions-column .card-body { padding: .3rem .55rem !important; }
+.arm-job-config { font-size: .84rem; line-height: 1.45; }
+.arm-job-actions { padding: .3rem .45rem !important; }
+.arm-job-actions .btn {
+  white-space: normal;
+  text-align: center;
+  font-size: .78rem;
+  line-height: 1.25;
+  padding: .35rem .4rem;
+}
+.arm-job-actions .btn + .btn { margin-top: .2rem; }
+.arm-job-double-feature-badge {
+  background: rgba(13, 110, 253, .12);
+  border-color: rgba(13, 110, 253, .3);
+}
+.arm-job-card-double-feature { overflow: hidden; }
+.arm-job-double-feature-media {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .8rem;
+  padding: .8rem;
+}
+.arm-job-feature-summary {
   display: flex;
   flex-direction: column;
-  padding: 1rem;
-  border-radius: 12px 0 0 12px;
+  align-items: center;
+  min-width: 0;
+  padding: .65rem;
+  border: 1px solid var(--arm-border);
+  border-radius: var(--arm-radius);
+  background: var(--arm-surface-muted);
+  text-align: center;
 }
-#armNotificationStatus:empty { display: none; }
-#armNotificationItems {
-  min-height: 0;
+.arm-job-feature-label {
+  margin-bottom: .4rem;
+  font-size: .75rem;
+  font-weight: 750;
+  color: var(--arm-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.arm-job-feature-poster {
+  display: block;
+  width: 100%;
+  max-width: 170px;
+  max-height: 245px;
+  margin: 0 auto;
+  object-fit: contain;
+}
+.arm-job-feature-title {
+  margin: .6rem 0 .2rem;
+  font-size: .98rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.arm-job-feature-subtitle { font-size: .78rem; color: var(--arm-muted); }
+.arm-job-feature-plot {
+  width: 100%;
+  max-height: 7rem;
+  margin: .5rem 0 0;
   overflow-y: auto;
-  margin: .25rem 0 .5rem;
+  text-align: left;
+  font-size: .8rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
-.arm-notification-item { padding: .55rem 0; }
-.arm-notification-item p { margin: .35rem 0 0; }
-.arm-notification-item p:last-child { margin-bottom: 0; }
-.arm-notification-drawer > .arm-resource-note { margin: .35rem 0; }
-.arm-notification-drawer > p:last-child { margin-bottom: 0; }
-@media (max-width: 575.98px) {
-  .arm-notification-drawer { bottom: .5rem; max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); }
+.arm-job-double-feature-details { border-top: 1px solid var(--arm-border); }
+.arm-job-double-feature-details .arm-job-info-column,
+.arm-job-double-feature-details .arm-job-actions-column { width: 100%; max-width: none; }
+.arm-job-double-feature-actions {
+  padding: .25rem .7rem .8rem;
+  border-top: 1px solid var(--arm-border);
+}
+.arm-job-double-feature-actions .arm-job-actions { padding: .5rem 0 0 !important; }
+.arm-job-double-feature-actions .btn-group-vertical {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .35rem;
+}
+.arm-job-double-feature-actions .btn-group-vertical .btn { margin: 0; border-radius: .35rem; }
+.arm-job-double-feature-actions .btn-group-vertical .btn-danger { grid-column: 1 / -1; }
+
+.arm-double-feature-selection {
+  padding: 1rem;
+  border: 1px solid var(--arm-border);
+  border-radius: var(--arm-radius);
+  background: var(--arm-surface);
+}
+.arm-double-feature-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.arm-double-feature-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  min-height: 100%;
+  padding: 1rem;
+  border: 1px solid var(--arm-border);
+  border-radius: var(--arm-radius);
+  background: var(--arm-surface-muted);
+  text-align: center;
+}
+.arm-double-feature-slot {
+  margin-bottom: .6rem;
+  font-size: .8rem;
+  font-weight: 750;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--arm-muted);
+}
+.arm-double-feature-poster {
+  display: block;
+  width: 100%;
+  max-width: 190px;
+  max-height: 265px;
+  object-fit: contain;
+}
+.arm-double-feature-no-poster,
+.arm-double-feature-placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 150px;
+  padding: 1rem;
+  color: var(--arm-muted);
+  border: 1px dashed var(--arm-border);
+  border-radius: .4rem;
+}
+.arm-double-feature-card p { overflow-wrap: anywhere; }
+#job-action-feedback { flex: 1 0 100%; }
+#save-yes:disabled { cursor: progress; opacity: .75; }
+
+@media (max-width: 767.98px) {
+  .arm-job-card-content { grid-template-columns: minmax(125px, 35%) minmax(0, 1fr); }
+  .arm-job-poster-column { grid-row: auto; padding: .5rem .3rem; }
+  .arm-job-poster { max-width: 170px; max-height: 245px; }
+  .arm-job-double-feature-media { gap: .5rem; padding: .55rem; }
+  .arm-job-feature-summary { padding: .45rem; }
+  .arm-job-feature-poster { max-height: 205px; }
+}
+@media (max-width: 480px) {
+  .arm-job-card-content { grid-template-columns: minmax(105px, 34%) minmax(0, 1fr); }
+  .arm-job-poster { max-height: 195px; }
+  .arm-job-info-column .card-body { padding: .45rem .35rem !important; }
+  .arm-job-double-feature-media { gap: .35rem; padding: .4rem; }
+  .arm-job-feature-title { font-size: .84rem; }
+  .arm-job-feature-plot { max-height: 5rem; font-size: .72rem; }
+  .arm-job-double-feature-actions .btn-group-vertical { grid-template-columns: minmax(0, 1fr); }
+  .arm-job-double-feature-actions .btn-group-vertical .btn-danger { grid-column: auto; }
+  .arm-double-feature-pair { gap: .5rem; }
+  .arm-double-feature-card { padding: .5rem; }
+  .arm-double-feature-poster { max-height: 180px; }
 }
 
 

@@ -5,6 +5,15 @@
         <input type="hidden" name="metadata_controls" value="1">
         <div class="form-row">
             <div class="form-group col-12 col-md-6">
+                <label for="disc_side">Disc side</label>
+                <select class="form-control" id="disc_side" name="disc_side">
+                    <option value="" {{ 'selected' if not disc_side else '' }}>Single-sided / not specified</option>
+                    <option value="A" {{ 'selected' if disc_side == 'A' else '' }}>Side A</option>
+                    <option value="B" {{ 'selected' if disc_side == 'B' else '' }}>Side B</option>
+                </select>
+                <small class="form-text text-muted">For double-sided DVDs, rip each side as a separate job and mark it here.</small>
+            </div>
+            <div class="form-group col-12 col-md-6">
                 <label for="season_number">Season</label>
                 <div class="input-group">
                     <div class="input-group-prepend"><button class="btn btn-outline-secondary" type="button" data-step-target="season_number" data-step="-1" aria-label="Decrease season">−</button></div>

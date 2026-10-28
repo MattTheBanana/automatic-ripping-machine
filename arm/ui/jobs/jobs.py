@@ -23,7 +23,7 @@ from arm.ui import app, db, constants
 from arm.models.job import Job, JobState
 from arm.models.notifications import Notifications
 from arm.ui.forms import TitleSearchForm, ChangeParamsForm, TrackFormDynamic
-from arm.media_metadata import parse_media_label, detect_disc_metadata, safe_positive_int
+from arm.media_metadata import (detect_disc_metadata, is_generic_disc_title, parse_media_label, safe_positive_int)
 
 route_jobs = Blueprint('route_jobs', __name__,
                        template_folder='templates',
@@ -51,17 +51,24 @@ def _disc_metadata_values(job, params=None):
     start, end = values["episode_start"], values["episode_end"]
     if start and end and end < start:
         values["episode_start"], values["episode_end"] = end, start
+    side = params.get("disc_side") if params is not None and "disc_side" in params else getattr(job, "disc_side", None)
+    side = str(side or "").strip().upper()
+    values["disc_side"] = side if side in ("A", "B") else None
     return values
 
 
 def _metadata_query_args(values):
-    return {field: ("" if values.get(field) is None else str(values[field]))
+    args = {field: ("" if values.get(field) is None else str(values[field]))
             for field in _DISC_METADATA_FIELDS}
+    args["disc_side"] = values.get("disc_side") or ""
+    return args
 
 
 def _special_features_values(job, params=None, media_type=None, metadata_values=None):
     """Resolve automatic Disc 2 special-feature selection or an explicit user override."""
     params = params or {}
+    if str(params.get("double_feature", "")).strip().lower() in ("1", "true", "yes", "on"):
+        return {"special_features": False, "special_features_auto": False}
     auto_value = params.get("special_features_auto")
     if auto_value is None:
         automatic = bool(getattr(job, "special_features_auto", True))
@@ -89,6 +96,7 @@ def _special_features_values(job, params=None, media_type=None, metadata_values=
 def _save_disc_metadata(job, values, feature_values=None):
     for field in _DISC_METADATA_FIELDS:
         setattr(job, field, values.get(field))
+    job.disc_side = values.get("disc_side")
     if feature_values is not None:
         job.special_features = bool(feature_values.get("special_features", False))
         job.special_features_auto = bool(feature_values.get("special_features_auto", True))
@@ -98,12 +106,42 @@ def _label_title_year(job):
     parsed = parse_media_label(getattr(job, "label", None))
     current_title = str(getattr(job, "title", "") or "").strip()
     label = str(getattr(job, "label", "") or "").strip()
-    if not current_title or current_title == label or current_title.lower() in ("none", "not identified"):
-        title = parsed.get("title") or current_title
+    if (not current_title or current_title == label or
+            is_generic_disc_title(current_title)):
+        title = parsed.get("title") or ""
     else:
         title = current_title
+    if is_generic_disc_title(title):
+        title = ""
     year = getattr(job, "year", None) or parsed.get("year") or ""
-    return title or "", year
+    return title, year
+
+
+_FEATURE_FIELDS = ("title", "year", "type", "poster", "imdbID", "tmdbID", "plot")
+
+
+def _enabled(value):
+    return str(value or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _feature_from_params(params, prefix):
+    """Read one selected metadata result using a stable, prefix-based query shape."""
+    return {field: str(params.get(f"{prefix}_{field}", "") or "").strip()
+            for field in _FEATURE_FIELDS}
+
+
+def _same_feature(first, second):
+    first_id = first.get("tmdbID") or first.get("imdbID")
+    second_id = second.get("tmdbID") or second.get("imdbID")
+    if first_id and second_id:
+        return first_id.casefold() == second_id.casefold()
+
+    def normalize(value):
+        return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+
+    return normalize(first.get("title")) == normalize(second.get("title")) and (
+        first.get("year") or ""
+    ) == (second.get("year") or "")
 
 
 @route_jobs.route('/jobdetail')
@@ -206,17 +244,22 @@ def title_search():
     metadata_values = _disc_metadata_values(job, request.args)
     media_type = request.args.get("type") or job.video_type
     feature_values = _special_features_values(job, request.args, media_type, metadata_values)
+    double_feature = _enabled(request.args.get("double_feature"))
     if form.validate():
         title = request.args.get("title", "").strip()
         year = request.args.get("year", "").strip()
-        return redirect(url_for(
-            "route_jobs.list_titles", title=title, year=year, job_id=job_id,
-            **_metadata_query_args(metadata_values), **feature_values, type=media_type,
-            metadata_controls="1"
-        ))
+        query_args = {
+            "title": title, "year": year, "job_id": job_id,
+            **_metadata_query_args(metadata_values), **feature_values, "type": media_type,
+            "metadata_controls": "1",
+        }
+        if double_feature:
+            query_args["double_feature"] = "1"
+        return redirect(url_for("route_jobs.list_titles", **query_args))
     return render_template("titlesearch.html", title="Search metadata", form=form, job=job,
                            suggested_title=suggested_title, suggested_year=suggested_year,
-                           media_type=media_type, **metadata_values, **feature_values)
+                           media_type=media_type, double_feature=double_feature,
+                           **metadata_values, **feature_values)
 
 
 @route_jobs.route('/customTitle')
@@ -312,9 +355,20 @@ def updatetitle():
     if not title:
         flash("A title is required", "danger")
         return redirect(url_for("route_jobs.title_search", job_id=job_id))
+    if is_generic_disc_title(title):
+        flash(
+            "That looks like a generic disc label, not a media title. "
+            "Enter a real title or choose a search result.", "danger"
+        )
+        return redirect(url_for("route_jobs.title_search", job_id=job_id))
     new_title = ui_utils.clean_for_filename(title)
     new_year = request.args.get("year") or None
     media_type = request.args.get("type") or job.video_type
+    double_feature = _enabled(request.args.get("double_feature"))
+    secondary_title = request.args.get("secondary_title", "").strip()
+    if double_feature and (not secondary_title or is_generic_disc_title(secondary_title)):
+        flash("Choose two valid titles before saving a double feature.", "danger")
+        return redirect(url_for("route_jobs.title_search", job_id=job_id))
     imdb_id, tmdb_id = ui_utils.resolve_media_ids(
         new_title, new_year, request.args.get("imdbID"), request.args.get("tmdbID"), media_type
     )
@@ -323,8 +377,31 @@ def updatetitle():
     job.video_type = job.video_type_manual = media_type
     job.imdb_id = job.imdb_id_manual = imdb_id
     job.tmdb_id = tmdb_id
-    job.poster_url = job.poster_url_manual = request.args.get("poster")
+    job.poster_url = job.poster_url_manual = request.args.get("poster") or None
+    job.plot = request.args.get("plot") or None
     job.hasnicetitle = True
+    if double_feature:
+        second_type = request.args.get("secondary_type") or media_type
+        second_year = request.args.get("secondary_year") or None
+        second_imdb, second_tmdb = ui_utils.resolve_media_ids(
+            secondary_title, second_year, request.args.get("secondary_imdbID"),
+            request.args.get("secondary_tmdbID"), second_type
+        )
+        job.secondary_title = ui_utils.clean_for_filename(secondary_title)
+        job.secondary_year = second_year
+        job.secondary_video_type = second_type
+        job.secondary_imdb_id = second_imdb
+        job.secondary_tmdb_id = second_tmdb
+        job.secondary_poster_url = request.args.get("secondary_poster") or None
+        job.secondary_plot = request.args.get("secondary_plot") or None
+    else:
+        job.secondary_title = None
+        job.secondary_year = None
+        job.secondary_video_type = None
+        job.secondary_imdb_id = None
+        job.secondary_tmdb_id = None
+        job.secondary_poster_url = None
+        job.secondary_plot = None
     metadata_values = _disc_metadata_values(job, request.args)
     feature_values = _special_features_values(job, request.args, media_type, metadata_values)
     _save_disc_metadata(job, metadata_values, feature_values)
@@ -387,7 +464,24 @@ def list_titles():
         flash(f"No search results found for {title}", "danger")
         search_results = {"Search": []}
     suggested_title, suggested_year = _label_title_year(job)
+    double_feature = _enabled(request.args.get("double_feature"))
+    feature_a = _feature_from_params(request.args, "feature_a")
+    feature_b = _feature_from_params(request.args, "feature_b")
+    selected_slot = str(request.args.get("select_feature") or "").strip().upper()
+    if double_feature and selected_slot in ("A", "B"):
+        chosen = _feature_from_params(request.args, "choice")
+        other = feature_b if selected_slot == "A" else feature_a
+        if is_generic_disc_title(chosen["title"]):
+            flash("Choose a real movie or series title for each feature.", "danger")
+        elif other.get("title") and _same_feature(chosen, other):
+            flash("Feature A and Feature B must be different titles.", "danger")
+        elif selected_slot == "A":
+            feature_a = chosen
+        else:
+            feature_b = chosen
     return render_template("list_titles.html", results=search_results, job_id=job_id, form=form,
                            title=title or suggested_title, year=year or suggested_year,
                            suggested_title=suggested_title, suggested_year=suggested_year,
-                           media_type=media_type, **metadata_values, **feature_values)
+                           media_type=media_type, double_feature=double_feature,
+                           feature_a=feature_a, feature_b=feature_b,
+                           **metadata_values, **feature_values)

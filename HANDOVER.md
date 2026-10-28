@@ -112,6 +112,38 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 - Next useful improvement: publish an immutable per-commit image tag (for example, `git-<short-sha>`) alongside `latest`, the VERSION tag, and the legacy tag. Then TrueNAS deployments can select a specific build and the displayed image reference makes rollouts unambiguous. Check the current TrueNAS app's pull/redeploy behavior before adding `pull_policy: always`.
 
 
+## Current development notes (2026-10-27)
+
+### Recent PRs and verified state
+
+- **PR #14 — Improve MakeMKV progress, failure feedback, and resource UI** is merged to `main` (merge commit `5fd0903c4d498d70d8665e1f2ce610f221c79b18`). It adds separate current-title and total-disc MakeMKV progress bars, progress-log freshness/stall feedback, richer failure notifications with a log action, a resource drawer for system information, and less intrusive notification presentation.
+- **PR #15 — Fix duplicate triggers and optical tray lifecycle** remains open and mergeable: https://github.com/MattTheBanana/automatic-ripping-machine/pull/15. Last verified head: `f9c64959548d69bd5516808c0f63e00f17aea5b6`; its Quality Checks, Docker PR build, and ShellCheck passed at that head. It suppresses benign duplicate-trigger failures, avoids finalizing/ejecting an existing active job, detects tray-open cancellation during physical reads, and reduces notification drawer whitespace. Real DVD/Blu-ray/CD hardware testing remains outstanding.
+- **PR #16 — Improve rip panel layout and support multi-part discs** remains open and mergeable: https://github.com/MattTheBanana/automatic-ripping-machine/pull/16. Latest verified head: `ec5be13d5991dbcd11a3be257cb2904c229a9a71`. At this exact SHA, Quality Checks, Docker PR build, and ShellCheck all succeeded:
+  - Quality Checks: https://github.com/MattTheBanana/automatic-ripping-machine/actions/runs/40542361560
+  - Docker PR build: https://github.com/MattTheBanana/automatic-ripping-machine/actions/runs/40542361943
+  - ShellCheck: https://github.com/MattTheBanana/automatic-ripping-machine/actions/runs/40542362095
+  - Quality Checks includes Python 3.9–3.12 lint/UI-startup coverage, Python and JavaScript CodeQL, and the focused test suite on Python 3.10. The new generic-disc-label test is included in that focused test command. Do not describe PR #16 as merged unless GitHub reports it merged.
+
+### PR #16 implementation notes
+
+- **Compact rip panel and job actions:** active job-card HTML is generated in `arm/ui/static/js/common.js`; styling is in `arm/ui/static/css/arm-modern.css`. The poster column is wider, actions are directly beneath the poster, and Abandon Job is red. The confirmation disables controls while the request runs and shows persistent success/failure/timeout feedback. The success path removes the originating card using its full client card ID, which matters when child/remote server job IDs have prefixes.
+- **Side A / Side B:** `disc_side` is a nullable `Job` field, surfaced in `arm/ui/jobs/templates/disc_metadata_controls.html` and active-card badges. This records which side the job represents; ARM does not automatically flip the physical disc or detect which side is facing the laser. For double-sided media, complete the first side as one job, flip the disc, then use a separate job labeled with the other side.
+- **Double-feature selection:** existing job title fields represent Feature A. New optional fields on `Job` represent Feature B: `secondary_title`, `secondary_year`, `secondary_video_type`, `secondary_imdb_id`, `secondary_tmdb_id`, `secondary_poster_url`, and `secondary_plot`; `plot` stores Feature A's summary. The title-search flow supports choosing two distinct search results, preserving Feature A while searching for Feature B, previewing poster/type/year/plot symmetrically, and saving both choices together. Active cards show the two feature summaries side by side and refresh them when displayed feature metadata changes.
+- **Double-feature scope limitation:** the implementation records and displays two titles but does not determine which MakeMKV title/track corresponds to each film, split output files by film, or trigger a separate rip pass for the second title. Treat end-to-end file mapping/output naming as a separate follow-up requirement; do not claim the current change automatically produces two correctly named movie files.
+- **Database migration:** `arm/migrations/versions/8c1d4f2a9b70_side_double_feature.py` adds `disc_side`, Feature A's `plot`, and Feature B metadata columns. Upgrade/downgrade against a copy of an existing database before release. Existing installations need the migration applied before the new model fields are usable. Merging code alone does not update an existing running container.
+- **Generic disc-title filtering:** `arm/media_metadata.py:is_generic_disc_title` and `title_search_variants` filter placeholders before search; guards in `arm/ui/metadata.py` also prevent generic direct TMDB poster/search calls. Cases include `undefined`, `unknown`, `video`, `DVD_VIDEO`, `VIDEO_TS`, `disc 1`, `unknown_volume_1`, and other generic/numbered volume labels. The focused regression tests are in `test/unittest/test_generic_disc_labels.py`, and `.github/workflows/main.yml` includes them in the Python 3.10 test step. Keep this list conservative to avoid blocking legitimate film titles.
+- **MakeMKV progress-log link:** the freshness text now links to `LOGPATH/progress/<job_id>.log`, the separate MakeMKV progress file, not the regular ARM job logfile. `arm/api/json_api.py` exposes its basename as `progress_logfile`; `arm/ui/static/js/common.js` links the label; `arm/ui/logs/logs.py` handles a restricted progress-source mode and validates numeric `<job_id>.log` names; `arm/ui/logs/templates/logview.html` passes the source flag through to the reader.
+- **Job-card refresh contract:** keep relevant element IDs in `common.js` and `jobRefresh.js` consistent. The refresh loop normally updates existing cards incrementally; it rebuilds double-feature cards if their visible metadata/layout changes. Do not put a full card rebuild on every poll.
+- **Template/CSS checks:** inspect both desktop and narrow mobile layouts. Verify button placement, visible progress bars, poster clipping, selection persistence while choosing Feature B, and both feature columns' symmetric details. A CI smoke-start is not a browser-based visual check.
+
+### Remaining validation before merge/release
+
+1. Review the full PR #16 diff and manually exercise the title-selection flow, Abandon Job modal success/error paths, and MakeMKV progress-log link in a running UI.
+2. If further commits are pushed to PR #16, re-check CI for the exact new head SHA before merge. The currently verified passing SHA is `ec5be13d5991dbcd11a3be257cb2904c229a9a71`.
+3. Test Alembic upgrade and downgrade using a backup/copy of a database before production deployment.
+4. Test actual optical hardware: normal DVD/Blu-ray ripping, tray-open cancellation, double-sided media as two separate Side A/Side B jobs, and a real double-feature disc. The shared CI runners do not validate physical drive behavior.
+5. After merge, verify that the custom ARM image publish workflow succeeded and recreate/redeploy the TrueNAS workload with the updated image. An open PR or merged source commit by itself does not update the running container.
+
 ## Notification drawer email preferences (2026-10-27)
 
 - The notification slide-out drawer includes persistent switches for email notifications overall, errors, successful completion, and other events. The “other events” category is present because ARM also emits informational events such as disc detection and job-start notifications.

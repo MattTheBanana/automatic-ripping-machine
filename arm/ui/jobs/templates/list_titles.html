@@ -18,14 +18,87 @@
             </div>
         </div>
         <input type="hidden" name="job_id" value="{{ job_id }}">
+        {% if double_feature %}
+            {% for prefix, feature in [('feature_a', feature_a), ('feature_b', feature_b)] %}
+                <input type="hidden" name="{{ prefix }}_title" value="{{ feature.title }}">
+                <input type="hidden" name="{{ prefix }}_year" value="{{ feature.year }}">
+                <input type="hidden" name="{{ prefix }}_type" value="{{ feature.type }}">
+                <input type="hidden" name="{{ prefix }}_poster" value="{{ feature.poster }}">
+                <input type="hidden" name="{{ prefix }}_imdbID" value="{{ feature.imdbID }}">
+                <input type="hidden" name="{{ prefix }}_tmdbID" value="{{ feature.tmdbID }}">
+                <input type="hidden" name="{{ prefix }}_plot" value="{{ feature.plot }}">
+            {% endfor %}
+        {% endif %}
+        <div class="custom-control custom-checkbox mb-3">
+            <input type="checkbox" class="custom-control-input" id="double-feature" name="double_feature" value="1" {{ 'checked' if double_feature else '' }}>
+            <label class="custom-control-label" for="double-feature">This disc contains two movies or shows (double feature)</label>
+            <small class="form-text text-muted">Select Feature A and Feature B separately. The selected posters and details will be displayed symmetrically.</small>
+        </div>
         {% include "disc_metadata_controls.html" %}
         <button class="btn btn-primary btn-block" type="submit">Search again</button>
     </form>
+
+    {% if double_feature %}
+    <section class="arm-double-feature-selection mt-4" aria-labelledby="double-feature-heading">
+        <div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
+            <div>
+                <h2 id="double-feature-heading" class="h5 mb-1">Double-feature selection</h2>
+                <p class="small text-muted mb-0">Choose two different titles below. Neither title is saved until you press Save both titles.</p>
+            </div>
+            {% if feature_a.title or feature_b.title %}
+            <a class="btn btn-sm btn-outline-secondary mt-2 mt-sm-0"
+               href="{{ url_for('route_jobs.list_titles', title=title, year=year, job_id=job_id,
+                   double_feature='1', season_number=season_number if season_number is not none else '',
+                   disc_number=disc_number if disc_number is not none else '',
+                   episode_start=episode_start if episode_start is not none else '',
+                   episode_end=episode_end if episode_end is not none else '',
+                   disc_side=disc_side or '', metadata_controls='1',
+                   special_features='1' if special_features else '0',
+                   special_features_auto='1' if special_features_auto else '0', type=media_type) }}">Clear selections</a>
+            {% endif %}
+        </div>
+        <div class="arm-double-feature-pair">
+            {% for slot, feature in [('A', feature_a), ('B', feature_b)] %}
+            <article class="arm-double-feature-card">
+                <div class="arm-double-feature-slot">Feature {{ slot }}</div>
+                {% if feature.title %}
+                    {% if feature.poster %}<img class="arm-double-feature-poster" src="{{ feature.poster }}" alt="Poster for {{ feature.title }}">{% else %}<div class="arm-double-feature-no-poster">No poster available</div>{% endif %}
+                    <h3 class="h6 mt-2 mb-1">{{ feature.title }}</h3>
+                    <div class="small text-muted">{{ feature.type|capitalize }}{% if feature.year %} · {{ feature.year }}{% endif %}</div>
+                    <p class="small mt-2 mb-0">{{ feature.plot or 'No plot available.' }}</p>
+                {% else %}
+                    <div class="arm-double-feature-placeholder">Choose a search result as Feature {{ slot }}</div>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+        {% if feature_a.title and feature_b.title %}
+            <a class="btn btn-primary btn-block mt-3"
+               href="{{ url_for('route_jobs.updatetitle', job_id=job_id,
+                   title=feature_a.title, year=feature_a.year, type=feature_a.type,
+                   poster=feature_a.poster, imdbID=feature_a.imdbID, tmdbID=feature_a.tmdbID,
+                   plot=feature_a.plot, double_feature='1',
+                   secondary_title=feature_b.title, secondary_year=feature_b.year,
+                   secondary_type=feature_b.type, secondary_poster=feature_b.poster,
+                   secondary_imdbID=feature_b.imdbID, secondary_tmdbID=feature_b.tmdbID,
+                   secondary_plot=feature_b.plot,
+                   season_number=season_number if season_number is not none else '',
+                   disc_number=disc_number if disc_number is not none else '',
+                   episode_start=episode_start if episode_start is not none else '',
+                   episode_end=episode_end if episode_end is not none else '',
+                   disc_side=disc_side or '', metadata_controls='1',
+                   special_features='1' if special_features else '0',
+                   special_features_auto='1' if special_features_auto else '0') }}">Save both titles</a>
+        {% endif %}
+    </section>
+    {% endif %}
+
     <div class="row mt-4">
         {% for res in results.get("Search", []) %}
             {% if res.get("Type", "").lower() in ("movie", "series") %}
                 <div class="col-12 col-sm-6 col-lg-3 mb-3">
                     <div class="card h-100 text-center">
+                        {% if not double_feature %}
                         <a class="card-header" data-special-features-link href="{{ url_for('route_jobs.gettitle',
                             imdbID=res.get('imdbID', ''), tmdbID=res.get('tmdbID') or res.get('id', ''),
                             type=res.get('Type', 'movie'), job_id=job_id,
@@ -36,19 +109,60 @@
                             special_features='1' if special_features else '0',
                             special_features_auto='1' if special_features_auto else '0',
                             metadata_controls='1') }}">
-                            {% if res.get("Poster") %}<img src="{{ res['Poster'] }}" class="img-fluid arm-search-poster" alt="Poster for {{ res.get('Title', 'media') }}">{% else %}<span class="text-muted">No poster</span>{% endif %}
+                            {% if res.get("Poster") or res.get("poster_url") %}<img src="{{ res.get('Poster') or res.get('poster_url') }}" class="img-fluid arm-search-poster" alt="Poster for {{ res.get('Title', 'media') }}">{% else %}<span class="text-muted">No poster</span>{% endif %}
                         </a>
+                        {% else %}
+                            <div class="card-header">
+                                {% if res.get("Poster") or res.get("poster_url") %}<img src="{{ res.get('Poster') or res.get('poster_url') }}" class="img-fluid arm-search-poster" alt="Poster for {{ res.get('Title', 'media') }}">{% else %}<span class="text-muted">No poster</span>{% endif %}
+                            </div>
+                        {% endif %}
                         <div class="card-body">
                             <strong>{{ res.get("Title", "Unknown title") }}</strong>
                             <div>{{ res.get("Type", "media")|capitalize }}{% if res.get("Year") %} ({{ res.get("Year") }}){% endif %}</div>
+                            {% if double_feature %}
+                            <form action="{{ url_for('route_jobs.list_titles') }}" method="get" class="mt-3">
+                                <input type="hidden" name="title" value="{{ title }}">
+                                <input type="hidden" name="year" value="{{ year }}">
+                                <input type="hidden" name="job_id" value="{{ job_id }}">
+                                <input type="hidden" name="type" value="{{ media_type }}">
+                                <input type="hidden" name="double_feature" value="1">
+                                <input type="hidden" name="metadata_controls" value="1">
+                                <input type="hidden" name="season_number" value="{{ season_number if season_number is not none else '' }}">
+                                <input type="hidden" name="disc_number" value="{{ disc_number if disc_number is not none else '' }}">
+                                <input type="hidden" name="episode_start" value="{{ episode_start if episode_start is not none else '' }}">
+                                <input type="hidden" name="episode_end" value="{{ episode_end if episode_end is not none else '' }}">
+                                <input type="hidden" name="disc_side" value="{{ disc_side or '' }}">
+                                <input type="hidden" name="special_features" value="{{ '1' if special_features else '0' }}">
+                                <input type="hidden" name="special_features_auto" value="{{ '1' if special_features_auto else '0' }}">
+                                {% for prefix, feature in [('feature_a', feature_a), ('feature_b', feature_b)] %}
+                                    <input type="hidden" name="{{ prefix }}_title" value="{{ feature.title }}">
+                                    <input type="hidden" name="{{ prefix }}_year" value="{{ feature.year }}">
+                                    <input type="hidden" name="{{ prefix }}_type" value="{{ feature.type }}">
+                                    <input type="hidden" name="{{ prefix }}_poster" value="{{ feature.poster }}">
+                                    <input type="hidden" name="{{ prefix }}_imdbID" value="{{ feature.imdbID }}">
+                                    <input type="hidden" name="{{ prefix }}_tmdbID" value="{{ feature.tmdbID }}">
+                                    <input type="hidden" name="{{ prefix }}_plot" value="{{ feature.plot }}">
+                                {% endfor %}
+                                <input type="hidden" name="choice_title" value="{{ res.get('Title', '') }}">
+                                <input type="hidden" name="choice_year" value="{{ res.get('Year', '') }}">
+                                <input type="hidden" name="choice_type" value="{{ res.get('Type', '') }}">
+                                <input type="hidden" name="choice_poster" value="{{ res.get('Poster') or res.get('poster_url') or '' }}">
+                                <input type="hidden" name="choice_imdbID" value="{{ res.get('imdbID', '') }}">
+                                <input type="hidden" name="choice_tmdbID" value="{{ res.get('tmdbID') or res.get('id', '') }}">
+                                <input type="hidden" name="choice_plot" value="{{ res.get('Plot', '') }}">
+                                <div class="d-flex flex-column">
+                                    <button class="btn btn-sm btn-outline-primary" type="submit" name="select_feature" value="A">Choose as Feature A</button>
+                                    <button class="btn btn-sm btn-outline-primary" type="submit" name="select_feature" value="B">Choose as Feature B</button>
+                                </div>
+                            </form>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
             {% endif %}
         {% else %}
-            <div class="col-12"><p class="text-muted text-center">No results found. Try spelling the title with spaces or removing the year.</p></div>
+            <div class="col-12"><p class="text-muted text-center">No results found. Try entering a real title instead of a generic disc label such as “video” or “undefined”.</p></div>
         {% endfor %}
     </div>
 </div>
 {% endblock %}
-

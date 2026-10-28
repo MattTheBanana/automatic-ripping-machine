@@ -20,9 +20,10 @@
                         <p><span class="ui-icon ui-icon-alert" style="margin:12px 12px 20px 0;"></span>
                             <span id="m-body">This job will be abandoned. Are you sure?</span></p>
                     </div>
-                    <div class="modal-footer">
-                        <button id="save-no" type="button" class="btn btn-secondary" data-dismiss="modal">No</button>
-                        <button id="save-yes" type="button" class="btn btn-primary">Yes</button>
+                    <div class="modal-footer flex-wrap">
+                        <div id="job-action-feedback" class="alert d-none w-100 mb-2" role="status" aria-live="polite"></div>
+                        <button id="save-no" type="button" class="btn btn-secondary">No</button>
+                        <button id="save-yes" type="button" class="btn btn-danger">Yes, abandon job</button>
                     </div>
                 </div>
             </div>
