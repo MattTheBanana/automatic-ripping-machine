@@ -230,7 +230,13 @@ class SystemDrives(db.Model):  # pylint: disable=too-many-instance-attributes
         try:
             arm_subprocess(cmd, check=True)
         except CalledProcessError as err:
-            return err.stderr
+            # ProcessHandler combines stderr into CalledProcessError.output, so
+            # err.stderr is normally None even when eject fails.
+            output = err.stderr or err.output
+            return str(output).strip() if output else str(err)
+        except OSError as err:
+            # Report missing executables and device-open errors to the caller.
+            return str(err)
 
     def debug(self, logger=logging):
         """
