@@ -12,6 +12,13 @@
                     <option value="B" {{ 'selected' if disc_side == 'B' else '' }}>Side B</option>
                 </select>
                 <small class="form-text text-muted">For double-sided DVDs, rip each side as a separate job and mark it here.</small>
+                {% if show_double_feature_option %}
+                <div class="custom-control custom-checkbox mt-3">
+                    <input type="checkbox" class="custom-control-input" id="double-feature" name="double_feature" value="1" aria-describedby="double-feature-help" {{ 'checked' if double_feature else '' }}>
+                    <label class="custom-control-label font-weight-bold" for="double-feature">Double Feature</label>
+                    <small id="double-feature-help" class="form-text text-muted d-block">Select two movie/show titles for one disc and display them side by side while ripping.</small>
+                </div>
+                {% endif %}
             </div>
             <div class="form-group col-12 col-md-6">
                 <label for="season_number">Season</label>
