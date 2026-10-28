@@ -43,11 +43,17 @@ class TestDoubleFeatureLayout(unittest.TestCase):
         title_search = (
             ROOT / "arm/ui/jobs/templates/titlesearch.html"
         ).read_text(encoding="utf-8")
+        controls = (
+            ROOT / "arm/ui/jobs/templates/disc_metadata_controls.html"
+        ).read_text(encoding="utf-8")
         results = (
             ROOT / "arm/ui/jobs/templates/list_titles.html"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("Enable double-feature mode — select two titles", title_search)
+        self.assertIn('label class="custom-control-label font-weight-bold" for="double-feature">Double Feature</label>', controls)
+        self.assertIn('label for="disc_side">Disc side</label>', controls)
+        self.assertIn("show_double_feature_option", controls)
+        self.assertNotIn('id="double-feature"', title_search)
         self.assertIn("Choose as Feature A", results)
         self.assertIn("Choose as Feature B", results)
         self.assertIn("Save both titles", results)
