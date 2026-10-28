@@ -17,6 +17,14 @@ import arm.ui.utils as ui_utils
 from arm.ui import app
 import arm.config.config as cfg
 
+def _is_progress_log_name(logfile):
+    """Accept only a bounded numeric job-id filename for progress logs."""
+    if not isinstance(logfile, str) or len(logfile) > 32 or not logfile.endswith(".log"):
+        return False
+    job_id = logfile[:-4]
+    return bool(job_id) and job_id.isascii() and job_id.isdigit()
+
+
 route_logs = Blueprint('route_logs', __name__,
                        template_folder='templates',
                        static_folder='../static')
@@ -33,7 +41,7 @@ def logs():
     mode = request.args['mode']
     logfile = request.args['logfile']
     source = "progress" if request.args.get("source") == "progress" else ""
-    if source == "progress" and not re.fullmatch(r"\d+\.log", logfile):
+    if source == "progress" and not _is_progress_log_name(logfile):
         raise ValidationError("Invalid MakeMKV progress log")
     session["page_title"] = "Logs"
 
@@ -78,7 +86,7 @@ def logreader():
     # Progress logs live in a separate directory. Only numeric job-id filenames
     # are allowed here so a client cannot use this mode to read arbitrary files.
     if source == "progress":
-        if not logfile or not re.fullmatch(r"\d+\.log", logfile):
+        if not _is_progress_log_name(logfile):
             raise ValidationError("Invalid MakeMKV progress log")
         full_path = os.path.join(log_path, "progress", logfile)
     else:
