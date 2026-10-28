@@ -472,11 +472,22 @@ class MakeMkvRuntimeError(RuntimeError):
     """
 
     def __init__(self, returncode, cmd, output=None, stderr=None):
-        logging.debug(f"MakeMKV command: '{' '.join(cmd)}'")
+        logging.error(
+            "MakeMKV command failed with exit code %s: %s",
+            returncode,
+            " ".join(cmd),
+        )
         if output is not None:
             logging.debug(f"MakeMKV output: {output}")
+            if output.strip():
+                output_lines = output.splitlines()
+                logging.error(
+                    "MakeMKV output before failure (last %d lines):\\n%s",
+                    min(30, len(output_lines)),
+                    os.linesep.join(output_lines[-30:]),
+                )
         if stderr is not None:
-            logging.debug(f"MakeMKV stderr: {stderr}")
+            logging.error("MakeMKV stderr: %s", stderr)
         self.message = f"Call to MakeMKV failed with code: {returncode}"
         logging.error(self.message)
         super().__init__(self.message)
