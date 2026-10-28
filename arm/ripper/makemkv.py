@@ -482,7 +482,7 @@ class MakeMkvRuntimeError(RuntimeError):
             if output.strip():
                 output_lines = output.splitlines()
                 logging.error(
-                    "MakeMKV output before failure (last %d lines):\\n%s",
+                    "MakeMKV output before failure (last %d lines):\n%s",
                     min(30, len(output_lines)),
                     os.linesep.join(output_lines[-30:]),
                 )
