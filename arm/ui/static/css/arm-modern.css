@@ -276,6 +276,15 @@ pre {
   border: 1px solid var(--arm-border);
   border-radius: 10px;
 }
+.arm-log-output {
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  overflow-x: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
 img, video, canvas, iframe { max-width: 100%; }
 :focus-visible { outline: 2px solid var(--arm-primary); outline-offset: 2px; }
 
