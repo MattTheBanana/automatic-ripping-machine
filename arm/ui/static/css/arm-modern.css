@@ -859,12 +859,20 @@ img, video, canvas, iframe { max-width: 100%; }
   background: rgba(13, 110, 253, .12);
   border-color: rgba(13, 110, 253, .3);
 }
-.arm-job-card-double-feature { overflow: hidden; }
+/* Double-feature jobs span the dashboard row instead of sharing a narrow card column. */
+.arm-job-column-double-feature {
+  flex: 0 0 100%;
+  max-width: 100%;
+}
+.arm-job-card-double-feature {
+  width: 100%;
+  overflow: hidden;
+}
 .arm-job-double-feature-media {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .8rem;
-  padding: .8rem;
+  gap: 1rem;
+  padding: 1rem;
 }
 .arm-job-feature-summary {
   display: flex;
@@ -888,8 +896,8 @@ img, video, canvas, iframe { max-width: 100%; }
 .arm-job-feature-poster {
   display: block;
   width: 100%;
-  max-width: 170px;
-  max-height: 245px;
+  max-width: 220px;
+  max-height: 300px;
   margin: 0 auto;
   object-fit: contain;
 }
@@ -910,9 +918,20 @@ img, video, canvas, iframe { max-width: 100%; }
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
-.arm-job-double-feature-details { border-top: 1px solid var(--arm-border); }
+.arm-job-double-feature-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 1rem;
+  padding: .25rem 1rem;
+  border-top: 1px solid var(--arm-border);
+}
 .arm-job-double-feature-details .arm-job-info-column,
-.arm-job-double-feature-details .arm-job-actions-column { width: 100%; max-width: none; }
+.arm-job-double-feature-details .arm-job-actions-column {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
 .arm-job-double-feature-actions {
   padding: .25rem .7rem .8rem;
   border-top: 1px solid var(--arm-border);
@@ -983,7 +1002,9 @@ img, video, canvas, iframe { max-width: 100%; }
   .arm-job-card-content { grid-template-columns: minmax(125px, 35%) minmax(0, 1fr); }
   .arm-job-poster-column { grid-row: auto; padding: .5rem .3rem; }
   .arm-job-poster { max-width: 170px; max-height: 245px; }
+  .arm-job-column-double-feature { flex: 0 0 100%; max-width: 100%; }
   .arm-job-double-feature-media { gap: .5rem; padding: .55rem; }
+  .arm-job-double-feature-details { grid-template-columns: minmax(0, 1fr); gap: .25rem; padding: .25rem .55rem; }
   .arm-job-feature-summary { padding: .45rem; }
   .arm-job-feature-poster { max-height: 205px; }
 }

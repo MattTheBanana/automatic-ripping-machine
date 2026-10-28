@@ -259,6 +259,7 @@ def title_search():
     return render_template("titlesearch.html", title="Search metadata", form=form, job=job,
                            suggested_title=suggested_title, suggested_year=suggested_year,
                            media_type=media_type, double_feature=double_feature,
+                           show_double_feature_option=True,
                            **metadata_values, **feature_values)
 
 
@@ -483,5 +484,6 @@ def list_titles():
                            title=title or suggested_title, year=year or suggested_year,
                            suggested_title=suggested_title, suggested_year=suggested_year,
                            media_type=media_type, double_feature=double_feature,
+                           show_double_feature_option=True,
                            feature_a=feature_a, feature_b=feature_b,
                            **metadata_values, **feature_values)
