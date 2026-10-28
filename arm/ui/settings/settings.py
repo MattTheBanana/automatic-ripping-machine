@@ -18,9 +18,9 @@ import platform
 import importlib
 import re
 import subprocess
+import time
 from datetime import datetime
 import os
-import time
 
 import sqlalchemy
 
@@ -47,9 +47,10 @@ route_settings = Blueprint('route_settings', __name__,
                            static_folder='../static')
 REDIRECT_SETTINGS = "route_settings.settings"
 
-_RESOURCE_HW_SUPPORT_CACHE = None
-_RESOURCE_HW_SUPPORT_CACHE_AT = 0.0
-_RESOURCE_HW_SUPPORT_CACHE_TTL = 300
+# Hardware capability probing launches HandBrake and is therefore cached separately
+# from frequently refreshed CPU, memory, and disk readings.
+_RESOURCE_HW_SUPPORT_CACHE = {"value": None, "updated_at": 0.0}
+_RESOURCE_HW_SUPPORT_CACHE_SECONDS = 300
 
 
 # Human-readable titles for the advanced ripper configuration keys.
@@ -383,6 +384,12 @@ def save_ui_settings():
         arm_ui_cfg.language = format(form.language.data)
         arm_ui_cfg.database_limit = format(form.database_limit.data)
         arm_ui_cfg.notify_refresh = format(form.notify_refresh.data)
+        arm_ui_cfg.show_job_ripper = bool(form.show_job_ripper.data)
+        arm_ui_cfg.show_job_rip_method = bool(form.show_job_rip_method.data)
+        arm_ui_cfg.show_job_main_feature = bool(form.show_job_main_feature.data)
+        arm_ui_cfg.show_job_min_length = bool(form.show_job_min_length.data)
+        arm_ui_cfg.show_job_max_length = bool(form.show_job_max_length.data)
+        arm_ui_cfg.device_display_mode = form.device_display_mode.data or "coded"
         db.session.commit()
         success = True
     # Masking the jinja update, otherwise an error is thrown
@@ -629,8 +636,8 @@ def update_sysinfo():
 
 @route_settings.route('/resource_metrics')
 @login_required
-def resource_metrics():
-    """Return refreshed process-environment metrics for the right-side resource drawer."""
+def resource_metrics():  # noqa: C901
+    """Return current system, storage and transcoding-capability data for the resource drawer."""
     import psutil
 
     def read_limit(paths):
@@ -644,6 +651,37 @@ def resource_metrics():
                         return number
             except (OSError, ValueError):
                 continue
+        return None
+
+    def disk_metrics(path):
+        try:
+            usage = psutil.disk_usage(path)
+            return {
+                "available": True,
+                "percent": round(usage.percent, 1),
+                "free_gb": round(usage.free / (1024 ** 3), 1),
+                "path": path,
+            }
+        except (OSError, TypeError, ValueError):
+            return {"available": False, "percent": None, "free_gb": None, "path": path}
+
+    def cpu_temperature():
+        try:
+            temperatures = psutil.sensors_temperatures()
+        except (AttributeError, NotImplementedError, OSError, RuntimeError):
+            return None
+        for group_name in ("coretemp", "cpu_thermal", "k10temp"):
+            for sensor in temperatures.get(group_name, ()):
+                current = getattr(sensor, "current", None)
+                if current is not None:
+                    return round(float(current), 1)
+        for group_name, sensors in temperatures.items():
+            if "cpu" not in group_name.lower():
+                continue
+            for sensor in sensors:
+                current = getattr(sensor, "current", None)
+                if current is not None:
+                    return round(float(current), 1)
         return None
 
     memory = psutil.virtual_memory()
@@ -665,95 +703,35 @@ def resource_metrics():
         memory_percent = round(memory.percent, 1)
         scope = "runtime memory view; container limit not detected"
 
+    server = SystemInfo.query.filter_by(id="1").first()
+    now = time.monotonic()
+    if (_RESOURCE_HW_SUPPORT_CACHE["value"] is None
+            or now - _RESOURCE_HW_SUPPORT_CACHE["updated_at"] >= _RESOURCE_HW_SUPPORT_CACHE_SECONDS):
+        try:
+            _RESOURCE_HW_SUPPORT_CACHE["value"] = check_hw_transcode_support()
+        except Exception:
+            app.logger.exception("Unable to refresh hardware transcoding support")
+            if _RESOURCE_HW_SUPPORT_CACHE["value"] is None:
+                _RESOURCE_HW_SUPPORT_CACHE["value"] = {
+                    "intel": False, "nvidia": False, "amd": False
+                }
+        _RESOURCE_HW_SUPPORT_CACHE["updated_at"] = now
+
     return jsonify({
+        "system_name": getattr(server, "name", None) or cfg.arm_config.get("ARM_NAME") or "ARM Server",
+        "system_description": (
+            getattr(server, "description", None)
+            or "Automatic Ripping Machine main server"
+        ),
+        "cpu_model": getattr(server, "cpu", None) or platform.processor() or "Unavailable",
+        "cpu_temp_c": cpu_temperature(),
         "cpu_percent": round(psutil.cpu_percent(interval=0.1), 1),
         "memory_used_gb": round(used_bytes / (1024 ** 3), 2),
         "memory_available_gb": round(available_bytes / (1024 ** 3), 2),
         "memory_percent": memory_percent,
         "memory_total_gb": round(total_bytes / (1024 ** 3), 2),
+        "storage_transcode": disk_metrics(cfg.arm_config.get("TRANSCODE_PATH", "")),
+        "storage_completed": disk_metrics(cfg.arm_config.get("COMPLETED_PATH", "")),
+        "hw_support": _RESOURCE_HW_SUPPORT_CACHE["value"],
         "scope": scope,
-    })
-
-
-
-def _resource_cpu_temperature(psutil):
-    """Return the first readable CPU temperature, or None when sensors are unavailable."""
-    try:
-        temperatures = psutil.sensors_temperatures()
-    except (AttributeError, OSError, RuntimeError):
-        return None
-
-    for sensor_name in ("coretemp", "cpu_thermal", "k10temp"):
-        for sensor in temperatures.get(sensor_name, []):
-            current = getattr(sensor, "current", None)
-            if current is not None:
-                try:
-                    return round(float(current), 1)
-                except (TypeError, ValueError):
-                    continue
-    return None
-
-
-def _resource_disk_usage(psutil, path):
-    """Return compact disk usage information without flashing page-level messages."""
-    try:
-        usage = psutil.disk_usage(path)
-    except (OSError, ValueError):
-        return {"path": path, "free_gb": None, "percent": None}
-
-    return {
-        "path": path,
-        "free_gb": round(usage.free / (1024 ** 3), 1),
-        "percent": round(usage.percent, 1),
-    }
-
-
-@route_settings.route('/resource_details')
-@login_required
-def resource_details():
-    """Return the system, disk, and hardware-transcoding details for the resource drawer."""
-    import psutil
-
-    global _RESOURCE_HW_SUPPORT_CACHE, _RESOURCE_HW_SUPPORT_CACHE_AT
-
-    server = SystemInfo.query.filter_by(id=1).first()
-    memory = psutil.virtual_memory()
-    if server is not None:
-        system_name = server.name or "ARM Server"
-        system_description = server.description or ""
-        cpu_model = server.cpu or platform.processor() or "Unable to Identify"
-    else:
-        system_name = cfg.arm_config.get("ARM_NAME") or "ARM Server"
-        system_description = "Automatic Ripping Machine main server"
-        cpu_model = platform.processor() or "Unable to Identify"
-
-    now = time.monotonic()
-    cache_expired = now - _RESOURCE_HW_SUPPORT_CACHE_AT >= _RESOURCE_HW_SUPPORT_CACHE_TTL
-    if _RESOURCE_HW_SUPPORT_CACHE is None or cache_expired:
-        try:
-            _RESOURCE_HW_SUPPORT_CACHE = check_hw_transcode_support()
-        except Exception:
-            app.logger.exception("Unable to check hardware transcoding support for resource drawer")
-            _RESOURCE_HW_SUPPORT_CACHE = {"intel": False, "nvidia": False, "amd": False}
-        _RESOURCE_HW_SUPPORT_CACHE_AT = time.monotonic()
-
-    return jsonify({
-        "system": {
-            "name": system_name,
-            "description": system_description,
-            "cpu_model": cpu_model,
-            "cpu_temperature_c": _resource_cpu_temperature(psutil),
-        },
-        "memory": {
-            "total_gb": round(memory.total / (1024 ** 3), 1),
-            "free_gb": round(memory.available / (1024 ** 3), 1),
-            "used_gb": round(memory.used / (1024 ** 3), 1),
-            "percent": round(memory.percent, 1),
-        },
-        "storage": {
-            "transcode": _resource_disk_usage(psutil, cfg.arm_config["TRANSCODE_PATH"]),
-            "completed": _resource_disk_usage(psutil, cfg.arm_config["COMPLETED_PATH"]),
-        },
-        "hw_support": _RESOURCE_HW_SUPPORT_CACHE,
-        "hardware_help_url": "https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/",
     })

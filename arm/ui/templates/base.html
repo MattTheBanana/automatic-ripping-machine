@@ -7,122 +7,66 @@
         {% include 'nav.html' %}
         <button type="button" id="armNotificationToggle" class="arm-notification-tab"
                 aria-controls="armNotificationDrawer" aria-expanded="false" aria-label="Open notifications">
-            <span class="arm-notification-bell" aria-hidden="true">
-                <svg viewBox="0 0 16 16" focusable="false">
-                    <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zM8 1.918l-.797.161A4.002 4.002 0 0 0 4 6c0 .628-.134 2.197-.459 3.742-.16.767-.376 1.566-.663 2.258h10.244c-.287-.692-.502-1.49-.663-2.258C12.134 8.197 12 6.628 12 6a4.002 4.002 0 0 0-3.203-3.92L8 1.917zM14.22 12c.223.447.481.801.78 1H1c.299-.199.557-.553.78-1C2.68 10.2 3 6.88 3 6c0-2.42 1.72-4.44 4.005-4.901a1 1 0 1 1 1.99 0A5.002 5.002 0 0 1 13 6c0 .88.32 4.2 1.22 6z"/>
-                </svg>
-            </span><span class="sr-only">Notifications</span>
+            <span aria-hidden="true">▤</span><span>Notifications</span>
             <span id="armNotificationCount" class="arm-notification-count"{% if not notify_count %} hidden{% endif %}>{{ notify_count or 0 }}</span>
-            <span class="arm-notification-tab-edge" aria-hidden="true">‹</span>
+            <span class="arm-notification-tab-edge" aria-hidden="true">←</span>
         </button>
         <button type="button" id="armResourceToggle" class="arm-resource-tab"
                 aria-controls="armResourceDrawer" aria-expanded="false" aria-label="Open resource monitor">
-            <span aria-hidden="true">▤</span><span>Resources</span><span class="arm-resource-tab-edge" aria-hidden="true">‹</span>
+            <span aria-hidden="true">▤</span><span>Resources</span><span class="arm-resource-tab-edge" aria-hidden="true">←</span>
         </button>
         <div id="armDrawerBackdrop" class="arm-notification-backdrop" hidden></div>
-                <aside id="armResourceDrawer" class="arm-resource-drawer" aria-hidden="true"
-               aria-labelledby="armResourceHeading">
+        <aside id="armResourceDrawer" class="arm-resource-drawer" aria-hidden="true" aria-labelledby="armResourceHeading">
             <div class="arm-notification-drawer-header">
-                <div>
-                    <h2 id="armResourceHeading">Resource monitor</h2>
-                    <p>System status, storage, and ARM runtime usage</p>
-                </div>
-                <button type="button" id="armResourceClose" class="btn btn-outline-secondary"
-                        aria-label="Close resource monitor">Close</button>
+                <div><h2 id="armResourceHeading">Resource monitor</h2><p>Live readings from ARM's runtime</p></div>
+                <button type="button" id="armResourceClose" class="btn btn-outline-secondary" aria-label="Close resource monitor">Close</button>
             </div>
             <p id="armResourceStatus" class="arm-resource-status" role="status">Loading current readings…</p>
 
             <section class="arm-resource-section" aria-labelledby="armResourceSystemHeading">
-                <h3 id="armResourceSystemHeading">System</h3>
-                <div class="arm-resource-identity">
-                    <div class="arm-resource-identity-row">
-                        <span>Server</span><strong id="armSystemName">Loading…</strong>
-                    </div>
-                    <div class="arm-resource-description">
-                        <span>Description</span><p id="armSystemDescription">—</p>
-                    </div>
-                    <div class="arm-resource-identity-row">
-                        <span>CPU</span><strong id="armSystemCpuModel">—</strong>
-                    </div>
-                    <div class="arm-resource-identity-row">
-                        <span>CPU temperature</span><strong id="armSystemCpuTemp">—</strong>
-                    </div>
-                </div>
-            </section>
-
-            <section class="arm-resource-section" aria-labelledby="armResourceSystemMemoryHeading">
-                <h3 id="armResourceSystemMemoryHeading">System memory</h3>
-                <div class="arm-resource-stat-grid">
-                    <div class="arm-resource-stat"><span>Total</span><strong id="armSystemMemoryTotal">—</strong></div>
-                    <div class="arm-resource-stat"><span>Available</span><strong id="armSystemMemoryFree">—</strong></div>
-                    <div class="arm-resource-stat"><span>Used</span><strong id="armSystemMemoryUsed">—</strong></div>
-                    <div class="arm-resource-stat"><span>Usage</span><strong id="armSystemMemoryPercent">—</strong></div>
-                </div>
-                <div class="arm-resource-progress" aria-label="System memory usage">
-                    <span id="armSystemMemoryBar"></span>
-                </div>
-            </section>
-
-            <section class="arm-resource-section" aria-labelledby="armResourceRuntimeHeading">
-                <h3 id="armResourceRuntimeHeading">ARM runtime</h3>
+                <h3 id="armResourceSystemHeading" class="arm-resource-section-title">System</h3>
+                <div class="arm-resource-metric"><span>Name</span><strong id="armResourceName">—</strong></div>
+                <p id="armResourceDescription" class="arm-resource-description"></p>
+                <div class="arm-resource-metric"><span>CPU</span><strong id="armResourceCpuModel">—</strong></div>
+                <div class="arm-resource-metric"><span>CPU temperature</span><strong id="armResourceCpuTemp">—</strong></div>
                 <div class="arm-resource-metric"><span>CPU usage</span><strong id="armResourceCpu">—</strong></div>
-                <div class="arm-resource-progress" aria-label="Runtime CPU usage"><span id="armResourceCpuBar"></span></div>
-                <div class="arm-resource-stat-grid">
-                    <div class="arm-resource-stat"><span>Memory limit / total</span><strong id="armResourceMemoryTotal">—</strong></div>
-                    <div class="arm-resource-stat"><span>Memory used</span><strong id="armResourceMemoryUsed">—</strong></div>
-                    <div class="arm-resource-stat"><span>Memory available</span><strong id="armResourceMemoryAvailable">—</strong></div>
-                    <div class="arm-resource-stat"><span>Memory usage</span><strong id="armResourceMemoryPercent">—</strong></div>
-                </div>
-                <div class="arm-resource-progress" aria-label="Runtime memory usage">
-                    <span id="armResourceMemoryBar"></span>
-                </div>
-                <p class="arm-resource-note">Runtime memory uses a detected container limit when available; host memory and ZFS ARC accounting depend on the TrueNAS configuration.</p>
+                <div class="arm-resource-progress"><span id="armResourceCpuBar"></span></div>
+            </section>
+
+            <section class="arm-resource-section" aria-labelledby="armResourceMemoryHeading">
+                <h3 id="armResourceMemoryHeading" class="arm-resource-section-title">System memory</h3>
+                <div class="arm-resource-metric"><span>Total</span><strong id="armResourceMemoryTotal">—</strong></div>
+                <div class="arm-resource-metric"><span>Used</span><strong id="armResourceMemoryUsed">—</strong></div>
+                <div class="arm-resource-metric"><span>Available</span><strong id="armResourceMemoryAvailable">—</strong></div>
+                <div class="arm-resource-metric"><span>Usage</span><strong id="armResourceMemoryPercent">—</strong></div>
+                <div class="arm-resource-progress"><span id="armResourceMemoryBar"></span></div>
+                <p class="arm-resource-note">Container limits and host-wide memory reporting vary by TrueNAS configuration. These readings describe ARM's runtime view and may not include all ZFS ARC behavior.</p>
             </section>
 
             <section class="arm-resource-section" aria-labelledby="armResourceStorageHeading">
-                <h3 id="armResourceStorageHeading">Storage</h3>
+                <h3 id="armResourceStorageHeading" class="arm-resource-section-title">Storage</h3>
                 <div class="arm-resource-storage-block">
-                    <div class="arm-resource-storage-heading">
-                        <strong>Transcode</strong><span id="armResourceTranscodeUsed">—</span>
-                    </div>
-                    <div class="arm-resource-progress" aria-label="Transcode storage usage">
-                        <span id="armResourceTranscodeBar"></span>
-                    </div>
-                    <div class="arm-resource-storage-meta">
-                        <span>Free space</span><strong id="armResourceTranscodeFree">—</strong>
-                    </div>
-                    <code id="armResourceTranscodePath">—</code>
+                    <div class="arm-resource-metric"><span>Transcode usage</span><strong id="armResourceTranscodePercent">—</strong></div>
+                    <div class="arm-resource-progress"><span id="armResourceTranscodeBar"></span></div>
+                    <div class="arm-resource-metric"><span>Free space</span><strong id="armResourceTranscodeFree">—</strong></div>
+                    <div class="arm-resource-path" id="armResourceTranscodePath">—</div>
                 </div>
                 <div class="arm-resource-storage-block">
-                    <div class="arm-resource-storage-heading">
-                        <strong>Completed</strong><span id="armResourceCompletedUsed">—</span>
-                    </div>
-                    <div class="arm-resource-progress" aria-label="Completed storage usage">
-                        <span id="armResourceCompletedBar"></span>
-                    </div>
-                    <div class="arm-resource-storage-meta">
-                        <span>Free space</span><strong id="armResourceCompletedFree">—</strong>
-                    </div>
-                    <code id="armResourceCompletedPath">—</code>
+                    <div class="arm-resource-metric"><span>Completed usage</span><strong id="armResourceCompletedPercent">—</strong></div>
+                    <div class="arm-resource-progress"><span id="armResourceCompletedBar"></span></div>
+                    <div class="arm-resource-metric"><span>Free space</span><strong id="armResourceCompletedFree">—</strong></div>
+                    <div class="arm-resource-path" id="armResourceCompletedPath">—</div>
                 </div>
             </section>
 
             <section class="arm-resource-section" aria-labelledby="armResourceHardwareHeading">
-                <h3 id="armResourceHardwareHeading">Hardware transcoding support</h3>
-                <div class="arm-resource-hardware-row">
-                    <span>Intel QuickSync</span><span id="armHwIntel" class="arm-hardware-status">—</span>
-                    <a id="armHwIntelHelp" href="#" target="_blank" rel="noopener noreferrer" hidden>Help</a>
-                </div>
-                <div class="arm-resource-hardware-row">
-                    <span>Nvidia NVENC</span><span id="armHwNvidia" class="arm-hardware-status">—</span>
-                    <a id="armHwNvidiaHelp" href="#" target="_blank" rel="noopener noreferrer" hidden>Help</a>
-                </div>
-                <div class="arm-resource-hardware-row">
-                    <span>AMD VCN</span><span id="armHwAmd" class="arm-hardware-status">—</span>
-                    <a id="armHwAmdHelp" href="#" target="_blank" rel="noopener noreferrer" hidden>Help</a>
-                </div>
+                <h3 id="armResourceHardwareHeading" class="arm-resource-section-title">Hardware transcoding support</h3>
+                <div class="arm-resource-hardware-status"><span>Intel QuickSync</span><strong id="armResourceIntel">Checking</strong></div>
+                <div class="arm-resource-hardware-status"><span>Nvidia NVENC</span><strong id="armResourceNvidia">Checking</strong></div>
+                <div class="arm-resource-hardware-status"><span>AMD VCN</span><strong id="armResourceAmd">Checking</strong></div>
+                <p class="arm-resource-note">Capability detection is cached briefly because it invokes HandBrake.</p>
+                <p><a href="https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/" target="_blank" rel="noopener noreferrer">Hardware transcoding help</a></p>
             </section>
-            <p class="arm-resource-note">Values are observations, not reserved resources. CPU temperature or hardware support may be unavailable inside a container.</p>
             <p><a href="{{ url_for('route_settings.settings') }}#system">Open system information settings</a></p>
         </aside>
         <aside id="armNotificationDrawer" class="arm-notification-drawer" aria-hidden="true"
@@ -154,7 +98,7 @@
                                {% if key != 'EMAIL_NOTIFICATIONS_ENABLED' and not email_notification_preferences.get('EMAIL_NOTIFICATIONS_ENABLED', true) %}disabled{% endif %}>
                     </label>
                 {% endfor %}
-                <p id="armNotificationPreferencesStatus" class="arm-resource-note" role="status" aria-live="polite"></p>
+                <p id="armNotificationPreferencesStatus" class="arm-resource-status" role="status" aria-live="polite"></p>
             </section>
             <p id="armNotificationStatus" class="arm-resource-status" role="status" aria-live="polite"></p>
             <div id="armNotificationItems">
@@ -165,7 +109,21 @@
                             {% if notification.trigger_time %}
                                 <time datetime="{{ notification.trigger_time.isoformat() }}">{{ notification.trigger_time.strftime('%d %b %Y, %H:%M') }}</time>
                             {% endif %}
-                            {% if notification.message %}<p>{{ notification.message }}</p>{% endif %}
+                            {% if notification.message %}
+                                {% set note_message = notification.message %}
+                                {% if '[View log:' in note_message %}
+                                    {% set note_parts = note_message.rsplit('[View log:', 1) %}
+                                    {% set note_logfile = note_parts[1].split(']', 1)[0].strip() %}
+                                    {% if note_logfile.endswith('.log') and '/' not in note_logfile and '\\' not in note_logfile %}
+                                        <p>{{ note_parts[0].rstrip() }}</p>
+                                        <p><a class="btn btn-sm btn-outline-primary" href="{{ url_for('route_logs.logs', logfile=note_logfile, mode='full') }}">View log</a></p>
+                                    {% else %}
+                                        <p>{{ note_message }}</p>
+                                    {% endif %}
+                                {% else %}
+                                    <p>{{ note_message }}</p>
+                                {% endif %}
+                            {% endif %}
                         </article>
                     {% endfor %}
                 {% else %}
@@ -189,142 +147,6 @@
                 const resourceClose = document.getElementById('armResourceClose');
                 if (!backdrop || !notificationDrawer || !notificationToggle || !notificationClose ||
                     !resourceDrawer || !resourceToggle || !resourceClose) return;
-
-                let activeDrawer = null;
-                function openDrawer(name) {
-                    activeDrawer = name;
-                    const isNotifications = name === 'notifications';
-                    notificationDrawer.classList.toggle('is-open', isNotifications);
-                    resourceDrawer.classList.toggle('is-open', name === 'resources');
-                    notificationDrawer.setAttribute('aria-hidden', String(!isNotifications));
-                    resourceDrawer.setAttribute('aria-hidden', String(name !== 'resources'));
-                    notificationToggle.setAttribute('aria-expanded', String(isNotifications));
-                    resourceToggle.setAttribute('aria-expanded', String(name === 'resources'));
-                    backdrop.hidden = false;
-                    document.body.classList.add('arm-drawer-open');
-                    if (isNotifications) notificationClose.focus();
-                    else {
-                        resourceClose.focus();
-                        refreshResources();
-                        refreshResourceDetails();
-                    }
-                }
-                function closeDrawer() {
-                    if (!activeDrawer) return;
-                    const previous = activeDrawer;
-                    activeDrawer = null;
-                    notificationDrawer.classList.remove('is-open');
-                    resourceDrawer.classList.remove('is-open');
-                    notificationDrawer.setAttribute('aria-hidden', 'true');
-                    resourceDrawer.setAttribute('aria-hidden', 'true');
-                    notificationToggle.setAttribute('aria-expanded', 'false');
-                    resourceToggle.setAttribute('aria-expanded', 'false');
-                    backdrop.hidden = true;
-                    document.body.classList.remove('arm-drawer-open');
-                    (previous === 'notifications' ? notificationToggle : resourceToggle).focus();
-                }
-
-                notificationToggle.addEventListener('click', function () {
-                    if (activeDrawer === 'notifications') closeDrawer(); else openDrawer('notifications');
-                });
-                resourceToggle.addEventListener('click', function () {
-                    if (activeDrawer === 'resources') closeDrawer(); else openDrawer('resources');
-                });
-                notificationClose.addEventListener('click', closeDrawer);
-                resourceClose.addEventListener('click', closeDrawer);
-                backdrop.addEventListener('click', closeDrawer);
-                document.addEventListener('keydown', function (event) {
-                    if (event.key === 'Escape') closeDrawer();
-                });
-
-                function metric(id, value) {
-                    const node = document.getElementById(id);
-                    if (node) node.textContent = value;
-                }
-                function bar(id, value) {
-                    const node = document.getElementById(id);
-                    if (node) {
-                        node.style.width = Math.max(0, Math.min(100, Number(value) || 0)) + '%';
-                        node.classList.toggle('is-warning', Number(value) > 80);
-                    }
-                }
-                async function refreshResources() {
-                    try {
-                        const response = await fetch('{{ url_for("route_settings.resource_metrics") }}',
-                            {cache: 'no-store', credentials: 'same-origin'});
-                        if (!response.ok) throw new Error('HTTP ' + response.status);
-                        const data = await response.json();
-                        metric('armResourceCpu', data.cpu_percent == null ? 'Unavailable' : data.cpu_percent + '%');
-                        metric('armResourceMemoryTotal', data.memory_total_gb == null ? 'Unavailable' : data.memory_total_gb + ' GB');
-                        metric('armResourceMemoryUsed', data.memory_used_gb == null ? 'Unavailable' : data.memory_used_gb + ' GB');
-                        metric('armResourceMemoryAvailable', data.memory_available_gb == null ? 'Unavailable' : data.memory_available_gb + ' GB');
-                        metric('armResourceMemoryPercent', data.memory_percent == null ? 'Unavailable' : data.memory_percent + '%');
-                        bar('armResourceCpuBar', data.cpu_percent);
-                        bar('armResourceMemoryBar', data.memory_percent);
-                        metric('armResourceStatus', 'Live readings updated ' + new Date().toLocaleTimeString() +
-                            (data.scope ? ' · ' + data.scope : ''));
-                    } catch (error) {
-                        metric('armResourceStatus', 'Unable to refresh runtime readings. Check the server session and logs.');
-                    }
-                }
-
-                function usageText(value) {
-                    return value == null ? 'Unavailable' : value + '% used';
-                }
-
-                async function refreshResourceDetails() {
-                    try {
-                        const response = await fetch('{{ url_for("route_settings.resource_details") }}',
-                            {cache: 'no-store', credentials: 'same-origin'});
-                        if (!response.ok) throw new Error('HTTP ' + response.status);
-                        const data = await response.json();
-
-                        metric('armSystemName', data.system.name || 'ARM Server');
-                        metric('armSystemDescription', data.system.description || '—');
-                        metric('armSystemCpuModel', data.system.cpu_model || 'Unable to Identify');
-                        metric('armSystemCpuTemp', data.system.cpu_temperature_c == null
-                            ? 'Not reported' : data.system.cpu_temperature_c + '°C');
-
-                        metric('armSystemMemoryTotal', data.memory.total_gb + ' GB');
-                        metric('armSystemMemoryFree', data.memory.free_gb + ' GB');
-                        metric('armSystemMemoryUsed', data.memory.used_gb + ' GB');
-                        metric('armSystemMemoryPercent', data.memory.percent + '%');
-                        bar('armSystemMemoryBar', data.memory.percent);
-
-                        const transcode = data.storage.transcode;
-                        metric('armResourceTranscodeUsed', usageText(transcode.percent));
-                        metric('armResourceTranscodeFree', transcode.free_gb == null
-                            ? 'Unable to read path' : transcode.free_gb + ' GB');
-                        metric('armResourceTranscodePath', transcode.path || '—');
-                        bar('armResourceTranscodeBar', transcode.percent);
-
-                        const completed = data.storage.completed;
-                        metric('armResourceCompletedUsed', usageText(completed.percent));
-                        metric('armResourceCompletedFree', completed.free_gb == null
-                            ? 'Unable to read path' : completed.free_gb + ' GB');
-                        metric('armResourceCompletedPath', completed.path || '—');
-                        bar('armResourceCompletedBar', completed.percent);
-
-                        function setHardwareStatus(id, helpId, supported) {
-                            const status = document.getElementById(id);
-                            const help = document.getElementById(helpId);
-                            if (status) {
-                                status.textContent = supported ? 'Supported' : 'Not detected';
-                                status.classList.toggle('is-supported', Boolean(supported));
-                                status.classList.toggle('is-unavailable', !supported);
-                            }
-                            if (help) {
-                                help.href = data.hardware_help_url;
-                                help.hidden = Boolean(supported);
-                            }
-                        }
-                        setHardwareStatus('armHwIntel', 'armHwIntelHelp', data.hw_support.intel);
-                        setHardwareStatus('armHwNvidia', 'armHwNvidiaHelp', data.hw_support.nvidia);
-                        setHardwareStatus('armHwAmd', 'armHwAmdHelp', data.hw_support.amd);
-                    } catch (error) {
-                        metric('armResourceStatus', 'System details could not be refreshed. Runtime readings may still be available.');
-                    }
-                }
 
                 function updateEmailPreferenceAvailability() {
                     const emailEnabled = document.getElementById('armPreferenceEMAIL_NOTIFICATIONS_ENABLED');
@@ -368,6 +190,102 @@
                 });
                 updateEmailPreferenceAvailability();
 
+                let activeDrawer = null;
+                function openDrawer(name) {
+                    activeDrawer = name;
+                    const isNotifications = name === 'notifications';
+                    notificationDrawer.classList.toggle('is-open', isNotifications);
+                    resourceDrawer.classList.toggle('is-open', name === 'resources');
+                    notificationDrawer.setAttribute('aria-hidden', String(!isNotifications));
+                    resourceDrawer.setAttribute('aria-hidden', String(name !== 'resources'));
+                    notificationToggle.setAttribute('aria-expanded', String(isNotifications));
+                    resourceToggle.setAttribute('aria-expanded', String(name === 'resources'));
+                    backdrop.hidden = false;
+                    document.body.classList.add('arm-drawer-open');
+                    if (isNotifications) notificationClose.focus();
+                    else {
+                        resourceClose.focus();
+                        refreshResources();
+                    }
+                }
+                function closeDrawer() {
+                    if (!activeDrawer) return;
+                    const previous = activeDrawer;
+                    activeDrawer = null;
+                    notificationDrawer.classList.remove('is-open');
+                    resourceDrawer.classList.remove('is-open');
+                    notificationDrawer.setAttribute('aria-hidden', 'true');
+                    resourceDrawer.setAttribute('aria-hidden', 'true');
+                    notificationToggle.setAttribute('aria-expanded', 'false');
+                    resourceToggle.setAttribute('aria-expanded', 'false');
+                    backdrop.hidden = true;
+                    document.body.classList.remove('arm-drawer-open');
+                    (previous === 'notifications' ? notificationToggle : resourceToggle).focus();
+                }
+
+                notificationToggle.addEventListener('click', function () {
+                    if (activeDrawer === 'notifications') closeDrawer(); else openDrawer('notifications');
+                });
+                resourceToggle.addEventListener('click', function () {
+                    if (activeDrawer === 'resources') closeDrawer(); else openDrawer('resources');
+                });
+                notificationClose.addEventListener('click', closeDrawer);
+                resourceClose.addEventListener('click', closeDrawer);
+                backdrop.addEventListener('click', closeDrawer);
+                document.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape') closeDrawer();
+                });
+
+                function metric(id, value) {
+                    const node = document.getElementById(id);
+                    if (node) node.textContent = value;
+                }
+                function bar(id, value) {
+                    const node = document.getElementById(id);
+                    if (node) node.style.width = Math.max(0, Math.min(100, Number(value) || 0)) + '%';
+                }
+                async function refreshResources() {
+                    try {
+                        const response = await fetch('{{ url_for("route_settings.resource_metrics") }}',
+                            {cache: 'no-store', credentials: 'same-origin'});
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        const data = await response.json();
+                        metric('armResourceName', data.system_name || 'Unavailable');
+                        metric('armResourceDescription', data.system_description || '');
+                        metric('armResourceCpuModel', data.cpu_model || 'Unavailable');
+                        metric('armResourceCpuTemp', data.cpu_temp_c == null ? 'Not reported' : data.cpu_temp_c + '°C');
+                        metric('armResourceCpu', data.cpu_percent == null ? 'Unavailable' : data.cpu_percent + '%');
+                        metric('armResourceMemoryTotal', data.memory_total_gb == null ? 'Unavailable' : data.memory_total_gb + ' GB');
+                        metric('armResourceMemoryUsed', data.memory_used_gb == null ? 'Unavailable' : data.memory_used_gb + ' GB');
+                        metric('armResourceMemoryAvailable', data.memory_available_gb == null ? 'Unavailable' : data.memory_available_gb + ' GB');
+                        metric('armResourceMemoryPercent', data.memory_percent == null ? 'Unavailable' : data.memory_percent + '%');
+                        bar('armResourceCpuBar', data.cpu_percent);
+                        bar('armResourceMemoryBar', data.memory_percent);
+
+                        const transcode = data.storage_transcode || {};
+                        metric('armResourceTranscodePercent', transcode.percent == null ? 'Unavailable' : transcode.percent + '% used');
+                        metric('armResourceTranscodeFree', transcode.free_gb == null ? 'Unavailable' : transcode.free_gb + ' GB');
+                        metric('armResourceTranscodePath', transcode.path || 'Path unavailable');
+                        bar('armResourceTranscodeBar', transcode.percent);
+
+                        const completed = data.storage_completed || {};
+                        metric('armResourceCompletedPercent', completed.percent == null ? 'Unavailable' : completed.percent + '% used');
+                        metric('armResourceCompletedFree', completed.free_gb == null ? 'Unavailable' : completed.free_gb + ' GB');
+                        metric('armResourceCompletedPath', completed.path || 'Path unavailable');
+                        bar('armResourceCompletedBar', completed.percent);
+
+                        const hw = data.hw_support || {};
+                        metric('armResourceIntel', hw.intel === true ? 'Supported' : 'Not detected');
+                        metric('armResourceNvidia', hw.nvidia === true ? 'Supported' : 'Not detected');
+                        metric('armResourceAmd', hw.amd === true ? 'Supported' : 'Not detected');
+
+                        metric('armResourceStatus', 'Updated ' + new Date().toLocaleTimeString() +
+                            (data.scope ? ' · ' + data.scope : ''));
+                    } catch (error) {
+                        metric('armResourceStatus', 'Unable to refresh readings. Check the server session and logs.');
+                    }
+                }
+
                 if (notificationClear) {
                     notificationClear.addEventListener('click', async function () {
                         notificationClear.disabled = true;
@@ -402,9 +320,6 @@
                 window.setInterval(function () {
                     if (activeDrawer === 'resources') refreshResources();
                 }, 5000);
-                window.setInterval(function () {
-                    if (activeDrawer === 'resources') refreshResourceDetails();
-                }, 60000);
             })();
         </script>
 

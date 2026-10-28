@@ -126,7 +126,18 @@ def main():
     # Ripper type assessment for the various media types
     # Type: dvd/bluray
     if job.disctype in ["dvd", "bluray"]:
-        arm_ripper.rip_visual_media(have_dupes, job, log_file, job.has_track_99)
+        # Monitor only the period when ARM is reading the disc directly. If
+        # MakeMKV has already copied the data to disk, the subsequent transcode
+        # must not produce a false drive-sleep alert.
+        direct_drive_source = not arm_ripper.rip_with_mkv(job, job.has_track_99)
+        drive_watchdog = utils.DriveSleepWatchdog(
+            job, direct_drive_source=direct_drive_source
+        )
+        drive_watchdog.start()
+        try:
+            arm_ripper.rip_visual_media(have_dupes, job, log_file, job.has_track_99)
+        finally:
+            drive_watchdog.stop()
 
     # Type: Music
     elif job.disctype == "music":
@@ -244,29 +255,33 @@ if __name__ == "__main__":
         setup()
         main()
     except Exception as error:
-        logging.critical("A fatal error has occurred and ARM is exiting.")
+        arm_logger = logging.getLogger("ARM")
+        arm_logger.critical("A fatal error has occurred and ARM is exiting.")
         print_stacktrace = (
-            logging.getLogger().getEffectiveLevel() == logging.DEBUG
+            arm_logger.getEffectiveLevel() == logging.DEBUG
             or not isinstance(error, utils.RipperException)
         )
-        logging.critical(error, exc_info=(error if print_stacktrace else None),)
+        arm_logger.critical("%s", error, exc_info=(error if print_stacktrace else None))
 
         if job:
-            utils.notify(
-                job,
-                constants.NOTIFY_TITLE,
-                f"ARM encountered a fatal error processing {job.title}. "
-                f"Check the logs for more details. {error}"
+            disc_context = job.title or job.label or job.devpath or f"Job {job.job_id}"
+            notification_title = f"ARM job failed: {disc_context}"[:256]
+            notification_body = utils.format_failure_notification(
+                disc_context, error, job.logfile or "arm.log"
             )
+            utils.notify(job, notification_title, notification_body)
             job.status = JobState.FAILURE.value
             job.errors = str(error)
         else:
-            utils.notify(
-                None,
-                constants.NOTIFY_TITLE,
-                f"ARM encountered a fatal error during job setup. "
-                f"Check the logs for more details. {error}"
+            device_path = (
+                f"/dev/{args.devpath}" if args and getattr(args, "devpath", None)
+                else "unknown drive"
             )
+            notification_title = f"ARM job setup failed: {device_path}"[:256]
+            notification_body = utils.format_failure_notification(
+                device_path, error, "arm.log", setup=True
+            )
+            utils.notify(None, notification_title, notification_body)
         # Possibly add cleanup section here for failed job files
     else:
         if job:

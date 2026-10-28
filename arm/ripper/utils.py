@@ -8,6 +8,7 @@ import shutil
 import time
 import random
 import re
+import threading
 from logging import Logger
 from pathlib import Path, PurePath
 from math import ceil
@@ -21,7 +22,7 @@ from netifaces import interfaces, ifaddresses, AF_INET
 
 import arm.config.config as cfg
 from arm.ripper.ProcessHandler import arm_subprocess
-from arm.ui import db  # needs to be imported before models
+from arm.ui import app, db  # needs to be imported before models
 from arm.models.job import Job, JobState
 from arm.models.notifications import Notifications
 from arm.models.track import Track
@@ -53,6 +54,178 @@ def _email_notification_category(title, body):
 
 class RipperException(Exception):
     pass
+
+
+class DriveSleepWatchdog(threading.Thread):
+    """Alert when an optical-drive read appears stalled for an extended period.
+
+    Linux does not provide a consistent optical-drive sleep indicator. While ARM
+    is actively reading from a DVD/Blu-ray, this watchdog instead watches the
+    job and MakeMKV progress logs for a prolonged lack of activity.
+    """
+    DEFAULT_CHECK_INTERVAL_SECONDS = 30
+    DEFAULT_STALL_TIMEOUT_SECONDS = 600
+
+    def __init__(self, job, direct_drive_source=False, check_interval_seconds=None,
+                 stall_timeout_seconds=None):
+        super().__init__(name=f"drive-sleep-watchdog-{job.job_id}", daemon=True)
+        self.job = job
+        self.direct_drive_source = bool(direct_drive_source)
+        self.check_interval_seconds = (
+            check_interval_seconds or self.DEFAULT_CHECK_INTERVAL_SECONDS
+        )
+        self.stall_timeout_seconds = (
+            stall_timeout_seconds or self.DEFAULT_STALL_TIMEOUT_SECONDS
+        )
+        self._stop_event = threading.Event()
+        self._phase_active = False
+        self._last_activity_at = None
+        self._last_snapshot = None
+        self._alert_sent = False
+        self._error_logged = False
+
+    def _is_reading_from_drive(self):
+        """Return true only while a video job is expected to read its optical disc."""
+        if str(getattr(self.job, "disctype", "") or "").lower() not in ("dvd", "bluray"):
+            return False
+        status = str(getattr(self.job, "status", "") or "").lower()
+        if status == JobState.VIDEO_RIPPING.value:
+            return True
+        return self.direct_drive_source and status == JobState.TRANSCODE_ACTIVE.value
+
+    def _activity_snapshot(self):
+        """Return the timestamp/size of the log representing current source activity."""
+        log_dir = str(cfg.arm_config.get("LOGPATH", "") or "")
+        status = str(getattr(self.job, "status", "") or "").lower()
+        paths = []
+        if status == JobState.VIDEO_RIPPING.value:
+            # Use MakeMKV progress, not generic ARM log chatter, to detect stalled reads.
+            job_id = getattr(self.job, "job_id", None)
+            if job_id is not None and log_dir:
+                paths.append(os.path.join(log_dir, "progress", f"{job_id}.log"))
+        else:
+            # A direct-source transcode reports activity in the job log.
+            job_log = str(getattr(self.job, "logfile", "") or "").strip()
+            if job_log:
+                paths.append(job_log if os.path.isabs(job_log) else os.path.join(log_dir, job_log))
+
+        snapshot = []
+        for path in dict.fromkeys(paths):
+            try:
+                info = os.stat(path)
+                snapshot.append((path, info.st_mtime_ns, info.st_size))
+            except OSError:
+                snapshot.append((path, None, None))
+        return tuple(snapshot)
+
+    def _poll_once(self, now=None):
+        """Return true once when reading has stalled past the configured threshold."""
+        current_time = time.monotonic() if now is None else now
+        if not self._is_reading_from_drive():
+            self._phase_active = False
+            self._last_activity_at = None
+            self._last_snapshot = None
+            self._alert_sent = False
+            return False
+
+        snapshot = self._activity_snapshot()
+        if not self._phase_active:
+            self._phase_active = True
+            self._last_activity_at = current_time
+            self._last_snapshot = snapshot
+            self._alert_sent = False
+            return False
+
+        if snapshot != self._last_snapshot:
+            self._last_snapshot = snapshot
+            self._last_activity_at = current_time
+            self._alert_sent = False
+            return False
+
+        if (
+            not self._alert_sent
+            and self._last_activity_at is not None
+            and current_time - self._last_activity_at >= self.stall_timeout_seconds
+        ):
+            self._alert_sent = True
+            return True
+        return False
+
+    def _send_stall_alert(self):
+        """Send the stall warning through ARM's configured notification channels."""
+        job_id = getattr(self.job, "job_id", "unknown")
+        devpath = getattr(self.job, "devpath", "unknown device")
+        label = getattr(self.job, "label", None) or getattr(self.job, "title", None) or "unidentified disc"
+        minutes = max(1, int(self.stall_timeout_seconds // 60))
+        title = f"Optical drive may be asleep or stalled - Job {job_id}"
+        body = format_failure_notification(
+            f"{devpath} Job {job_id}: {label}",
+            f"No job-log or ripping-progress updates for {minutes} minutes while reading the disc. "
+            "The drive may have spun down, become unresponsive, or encountered a read error. "
+            "Check the drive connection, USB/power management, and job log.",
+            getattr(self.job, "logfile", None) or "arm.log",
+        )
+        # Notifications use Flask-SQLAlchemy's thread-local session.
+        with app.app_context():
+            notify(None, title, body)
+
+    def run(self):
+        """Poll job activity while the optical drive is expected to be read."""
+        while not self._stop_event.wait(self.check_interval_seconds):
+            try:
+                if self._poll_once():
+                    try:
+                        self._send_stall_alert()
+                    except Exception:
+                        if not self._error_logged:
+                            logging.exception(
+                                "Unable to send optical-drive stall alert for job %s",
+                                getattr(self.job, "job_id", "unknown"),
+                            )
+                            self._error_logged = True
+                    finally:
+                        # Ignore log writes caused by the alert itself; wait for real activity
+                        # to resume before re-arming the warning.
+                        self._last_snapshot = self._activity_snapshot()
+                        self._last_activity_at = time.monotonic()
+            except Exception:
+                if not self._error_logged:
+                    logging.exception(
+                        "Optical-drive watchdog failed for job %s",
+                        getattr(self.job, "job_id", "unknown"),
+                    )
+                    self._error_logged = True
+
+    def stop(self):
+        """Stop the watchdog promptly when the ripping operation exits."""
+        self._stop_event.set()
+        if self.is_alive() and threading.current_thread() is not self:
+            self.join(timeout=self.check_interval_seconds + 5)
+
+
+def format_failure_notification(context, error, logfile="arm.log", setup=False):
+    """Build a concise failure message and retain a safe, UI-actionable log reference."""
+    context = " ".join(str(context or "unknown disc").split())[:64]
+    logfile = str(logfile or "arm.log").strip()
+    if (not logfile.endswith(".log") or len(logfile) > 96 or "/" in logfile
+            or "\\" in logfile or "[" in logfile or "]" in logfile):
+        logfile = "arm.log"
+
+    detail = " ".join(str(error or "Unknown error").split())
+    prefix = ("Setup failed for " if setup else "Job failed for ") + f"{context}: "
+    normalized_error = detail.lower()
+    if "cds.tray_open" in normalized_error:
+        advice = " The tray is reported open; close it and retry."
+    elif "timed out waiting for drive to be ready" in normalized_error:
+        advice = " Check the disc, tray and drive connection."
+    elif setup:
+        advice = " Check drive setup and connection."
+    else:
+        advice = ""
+    log_action = f" [View log: {logfile}]"
+    detail_limit = max(0, 255 - len(prefix) - len(advice) - len(log_action))
+    detail = detail[:detail_limit].rstrip()
+    return f"{prefix}{detail}{advice}{log_action}"[:256]
 
 
 def notify(job, title: str, body: str):  # noqa: C901
@@ -309,8 +482,18 @@ def move_files(base_path, filename, job, is_main_feature=False):
 
     movie_path = job.path
     logging.info(f"Moving {job.video_type} {filename} to {movie_path}")
-    # For series there are no extras so always use the base path
-    extras_path = os.path.join(movie_path, job.config.EXTRAS_SUB) if job.video_type != "series" else movie_path
+    # Special-feature discs always go with the movie, under its configured extras folder
+    # when one is configured; otherwise keep them in the movie directory itself.
+    if bool(getattr(job, "special_features", False)) and str(job.video_type or "").lower() == "movie":
+        extras_subfolder = str(getattr(job.config, "EXTRAS_SUB", "extras") or "").strip()
+        extras_path = (
+            os.path.join(movie_path, extras_subfolder)
+            if extras_subfolder and extras_subfolder.lower() != "none"
+            else movie_path
+        )
+    else:
+        # Preserve the existing routing for ordinary movie extras and series.
+        extras_path = os.path.join(movie_path, job.config.EXTRAS_SUB) if job.video_type != "series" else movie_path
     make_dir(movie_path)
 
     if is_main_feature:
