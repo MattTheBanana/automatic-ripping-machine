@@ -9,6 +9,7 @@ Ripper Utils
 """
 
 import dataclasses
+import glob
 import logging
 import re
 import pyudev
@@ -172,55 +173,80 @@ class DriveInformationMedium(DriveInformationExtended, metaclass=MaskSerialMeta)
         self.media_bd = self._convert_bool(self.media_bd)
 
 
+def _fallback_drive_information(devnode):
+    """Build a minimal drive record when a container's udev database omits a device."""
+    return DriveInformationMedium(
+        mount=devnode,
+        maker="Unknown",
+        model="Optical drive",
+        serial="unknown",
+        serial_id="",
+        connection="",
+        read_cd=False,
+        read_dvd=False,
+        read_bd=False,
+        firmware="",
+        location="",
+        disc="",
+        loaded=False,
+        media_cd=False,
+        media_dvd=False,
+        media_bd=False,
+    )
+
+
 def drives_search():
     """
     Search the system for optical drives and yield DriveInformationMedium objects.
 
-    In a container environment, falls back to treating /dev/sr* as optical drives.
+    Some container udev databases omit optical block devices even when their /dev/srN
+    nodes are passed through. In that case, fall back to enumerating those device nodes.
     """
     context = pyudev.Context()
+    seen_devnodes = set()
+    fields = DRIVE_INFORMATION + DRIVE_INFORMATION_EXTENDED + DRIVE_INFORMATION_MEDIUM
     for device in context.list_devices(subsystem="block"):
         try:
             devnode = device.device_node
             if not devnode:
                 continue
+            seen_devnodes.add(devnode)
 
-            # Ignore loop&nvme devices
-            if devnode and (devnode.startswith("/dev/loop") or devnode.startswith("/dev/nvme")):
-                # Logging here might not be helpful, unsure yet
-                # logging.debug("Ignoring loop/nvme device: %s", devnode)
+            # Ignore loop&nvme devices.
+            if devnode.startswith("/dev/loop") or devnode.startswith("/dev/nvme"):
                 continue
 
-            # Log all properties - Helps with debugging if a drive has loaded all properties, or just the base
+            # Log all properties to help debug incomplete udev metadata.
             logging.debug("Device: %s", devnode)
             for key, value in device.properties.items():
                 app.logger.debug("  %s = %s", key, value)
 
-            # Optical drive detection - Try to use ID_TYPE then ID_CDROM but fall back to all drives matching /dev/sr*
-            # NOTE: this may be better to check if MAJOR = 11
-            # + devname `/dev/sr*` and possibly DEVTYPE as this always means its an optical drive on linux
-            # But just the first two MAJOR + devname should be more than enough to verify its a CD/DVD drive
             is_optical = (
                 device.properties.get("ID_TYPE") == "cd" or
                 device.properties.get("ID_CDROM") == "1" or
-                re.match(r"^/dev/sr\d+$", devnode)
+                re.fullmatch(r"/dev/sr\d+", devnode) is not None
             )
-
             if is_optical:
                 logging.info("Optical drive detected: %s", devnode)
-
-                # Try to populate fields, but allow missing values incase the drive hasn't been mounted/activated yet
-                fields = (
-                    DRIVE_INFORMATION +
-                    DRIVE_INFORMATION_EXTENDED +
-                    DRIVE_INFORMATION_MEDIUM
-                )
                 values = [device.properties.get(field) or "" for field in fields]
+                # Always use the actual enumerated node if the property was omitted.
+                values[0] = devnode
                 yield DriveInformationMedium(*values)
 
         except Exception as e:
             app.logger.error("Error processing device %s: %s", device, e, exc_info=True)
 
+    # A device passed through to Docker may exist under /dev but not in pyudev's
+    # enumeration. Keep the physical device discoverable even if metadata is missing.
+    for devnode in sorted(glob.glob("/dev/sr[0-9]*")):
+        if not re.fullmatch(r"/dev/sr\d+", devnode) or devnode in seen_devnodes:
+            continue
+        logging.warning(
+            "Optical device %s is present but missing from udev enumeration; "
+            "using a minimal drive record.",
+            devnode,
+        )
+        yield _fallback_drive_information(devnode)
 
 def drives_update(startup=False):
     """
@@ -254,21 +280,29 @@ def drives_update(startup=False):
         # first mount point.  If no `drive.serial_id` is found (e.g. on first
         # run), take the pre-existing mount point and update the serial_id
         # there.
-        query = (
-            SystemDrives
-            .query
-            .filter_by(serial_id=drive.serial_id, stale=True)
-            .order_by(SystemDrives.mount)
-        )
-        if db_drive := query.first():
-            app.logger.debug("Update drive '%s' by serial.", drive.serial_id)
-        elif db_drive := SystemDrives.query.filter_by(mount=drive.mount).first():
-            app.logger.debug("Update drive '%s' by mount path.", drive.mount)
-        else:
+        db_drive = None
+        if drive.serial_id:
+            query = (
+                SystemDrives
+                .query
+                .filter_by(serial_id=drive.serial_id, stale=True)
+                .order_by(SystemDrives.mount)
+            )
+            db_drive = query.first()
+            if db_drive:
+                app.logger.debug("Update drive '%s' by serial.", drive.serial_id)
+
+        # Do not match multiple metadata-poor fallback devices by an empty serial.
+        if db_drive is None:
+            db_drive = SystemDrives.query.filter_by(mount=drive.mount).first()
+            if db_drive:
+                app.logger.debug("Update drive '%s' by mount path.", drive.mount)
+
+        if db_drive is None:
             msg = "Create a new drive entity in the database for '%s' on '%s'."
-            app.logger.debug(msg, drive.serial_id, drive.mount)
+            app.logger.debug(msg, drive.serial_id or drive.mount, drive.mount)
             db_drive = SystemDrives()
-            db_drive.name = drive.serial_id
+            db_drive.name = drive.serial_id or drive.model or drive.mount
             db.session.add(db_drive)
         db_drive.update(drive)
         db.session.commit()  # needed to get drive_id for new entities
