@@ -281,6 +281,9 @@ def drives_update(startup=False):
         # first mount point.  If no `drive.serial_id` is found (e.g. on first
         # run), take the pre-existing mount point and update the serial_id
         # there.
+        # Fallback records have only a device path; they must not overwrite real
+        # capabilities/serial metadata already learned for this drive.
+        is_fallback = not drive.serial_id and drive.model == "Optical drive"
         db_drive = None
         if drive.serial_id:
             query = (
@@ -299,13 +302,19 @@ def drives_update(startup=False):
             if db_drive:
                 app.logger.debug("Update drive '%s' by mount path.", drive.mount)
 
-        if db_drive is None:
+        is_new_drive = db_drive is None
+        if is_new_drive:
             msg = "Create a new drive entity in the database for '%s' on '%s'."
             app.logger.debug(msg, drive.serial_id or drive.mount, drive.mount)
             db_drive = SystemDrives()
             db_drive.name = drive.serial_id or drive.model or drive.mount
             db.session.add(db_drive)
-        db_drive.update(drive)
+
+        if is_fallback and not is_new_drive:
+            db_drive.mount = drive.mount
+            db_drive.stale = False
+        else:
+            db_drive.update(drive)
         db.session.commit()  # needed to get drive_id for new entities
         db_drive.debug(logger=app.logger)
 
