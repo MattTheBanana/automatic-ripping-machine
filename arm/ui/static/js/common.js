@@ -131,7 +131,12 @@ function addJobItem(job, authenticated) {
         ? `${job.server_url}/jobdetail?job_id=${encodeURIComponent(idsplit[1])}`
         : `/jobdetail?job_id=${encodeURIComponent(idsplit[1])}`;
     const doubleFeature = hasDisplayValue(job.secondary_title);
-    let x = `<div class="col-md-6 col-xl-4 arm-job-column" id="jobId${job.job_id}">`;
+    // A two-feature job needs a full dashboard row so both movie summaries and
+    // the rip configuration remain readable side by side while the job refreshes.
+    const columnClass = doubleFeature
+        ? "col-12 arm-job-column arm-job-column-double-feature"
+        : "col-md-6 col-xl-4 arm-job-column";
+    let x = `<div class="${columnClass}" id="jobId${job.job_id}">`;
     x += `<div class="card arm-job-card mx-auto${doubleFeature ? " arm-job-card-double-feature" : ""}">`;
     x += `<div class="card-header text-center arm-job-card-header"><strong id="jobId${job.job_id}_header">${escapeHtml(titleManual(job))}</strong></div>`;
     if (doubleFeature) {
