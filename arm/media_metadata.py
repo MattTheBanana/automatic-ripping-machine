@@ -57,9 +57,11 @@ def is_generic_disc_title(value):
     if normalized in _GENERIC_DISC_TITLES:
         return True
     # Filesystem tools sometimes append a numeric volume index to a placeholder.
-    without_index = re.sub(r"\s+\d+$", "", normalized)
-    if without_index != normalized and without_index in _GENERIC_DISC_TITLES:
-        return True
+    # Avoid an end-anchored regex on an unbounded disc label; inspect the final token instead.
+    parts = normalized.rsplit(" ", 1)
+    if len(parts) == 2 and parts[1].isascii() and parts[1].isdigit():
+        if parts[0] in _GENERIC_DISC_TITLES:
+            return True
     return bool(re.fullmatch(
         r"(?:dvd|video|disc|disk|title|volume|track|movie|film|data|cd|vcd|iso)(?:\s+(?:\d+|[a-z]))?",
         normalized,
