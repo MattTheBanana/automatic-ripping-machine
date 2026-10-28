@@ -50,7 +50,11 @@ class TestDoubleFeatureLayout(unittest.TestCase):
             ROOT / "arm/ui/jobs/templates/list_titles.html"
         ).read_text(encoding="utf-8")
 
-        self.assertIn('label class="custom-control-label font-weight-bold" for="double-feature">Double Feature</label>', controls)
+        self.assertIn(
+            'label class="custom-control-label font-weight-bold" '
+            'for="double-feature">Double Feature</label>',
+            controls,
+        )
         self.assertIn('label for="disc_side">Disc side</label>', controls)
         self.assertIn("show_double_feature_option", controls)
         self.assertNotIn('id="double-feature"', title_search)
