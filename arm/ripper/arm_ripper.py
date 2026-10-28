@@ -79,6 +79,16 @@ def _run_makemkv(job):
     try:
         return makemkv.makemkv(job)
     except Exception as mkv_error:  # noqa: E722
+        # The handled RipperException below intentionally keeps user-facing failure
+        # messages concise. Log the original exception here so non-debug logs still
+        # show why MakeMKV failed (for example, its exit code or the underlying cause).
+        logging.error(
+            "MakeMKV failed for %s (%s): %s",
+            job.devpath,
+            type(mkv_error).__name__,
+            mkv_error,
+            exc_info=True,
+        )
         abort_reason = utils.detect_open_tray_abort(job)
         if abort_reason:
             raise utils.RipperException(abort_reason) from mkv_error
