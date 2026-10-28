@@ -34,6 +34,7 @@ class TestOpticalDriveInventory(unittest.TestCase):
             "Do not match multiple metadata-poor fallback devices by an empty serial.",
             source,
         )
+        self.assertIn("if is_fallback and not is_new_drive:", source)
 
     def test_ripper_refreshes_drive_inventory_before_reporting_missing_drive(self):
         source = (ROOT / "arm/ripper/main.py").read_text(encoding="utf-8")
