@@ -10,11 +10,6 @@
             <h2 class="h4 text-center mb-3">Search metadata</h2>
             <form action="" method="get" class="w-100" novalidate>
                 {{ form.hidden_tag() }}
-                <div class="custom-control custom-checkbox mb-3">
-                    <input type="checkbox" class="custom-control-input" id="double-feature" name="double_feature" value="1" aria-describedby="double-feature-help" {{ 'checked' if double_feature else '' }}>
-                    <label class="custom-control-label font-weight-bold" for="double-feature">Enable double-feature mode — select two titles</label>
-                    <small id="double-feature-help" class="form-text text-muted">After searching, choose one result for Feature A and one for Feature B. The active-rip panel expands to full width and displays both titles' metadata side by side. This labels one disc/job; it does not automatically split or separately name the two movie files.</small>
-                </div>
                 <div class="form-row">
                     <div class="form-group col-12 col-md-8">
                         <label for="searchtitle">Title</label>
