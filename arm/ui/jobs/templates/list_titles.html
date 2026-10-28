@@ -29,11 +29,6 @@
                 <input type="hidden" name="{{ prefix }}_plot" value="{{ feature.plot }}">
             {% endfor %}
         {% endif %}
-        <div class="custom-control custom-checkbox mb-3">
-            <input type="checkbox" class="custom-control-input" id="double-feature" name="double_feature" value="1" aria-describedby="double-feature-help" {{ 'checked' if double_feature else '' }}>
-            <label class="custom-control-label font-weight-bold" for="double-feature">Enable double-feature mode — select two titles</label>
-            <small id="double-feature-help" class="form-text text-muted">Choose a result for Feature A and another for Feature B below. The active-rip panel expands to full width and places both titles' posters, metadata, and rip settings side by side.</small>
-        </div>
         {% include "disc_metadata_controls.html" %}
         <button class="btn btn-primary btn-block" type="submit">Search again</button>
     </form>
