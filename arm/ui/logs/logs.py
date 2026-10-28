@@ -7,7 +7,6 @@ Covers
 """
 
 import os
-import re
 from pathlib import Path
 from flask_login import LoginManager, login_required  # noqa: F401
 from flask import render_template, request, Blueprint, send_file, session
@@ -16,6 +15,7 @@ from werkzeug.routing import ValidationError
 import arm.ui.utils as ui_utils
 from arm.ui import app
 import arm.config.config as cfg
+
 
 def _is_progress_log_name(logfile):
     """Accept only a bounded numeric job-id filename for progress logs."""
