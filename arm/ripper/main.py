@@ -205,7 +205,25 @@ def setup():
     arm_log = logger.create_early_logger(syslog=args.syslog)
     # Make sure all directories are fully setup
     utils.arm_setup(arm_log)
-    drive = SystemDrives.query.filter_by(mount=devpath).one()  # unique mounts
+    drive = SystemDrives.query.filter_by(mount=devpath).first()
+    if drive is None:
+        logging.warning(
+            "Drive %s is not in ARM's inventory; refreshing optical drive discovery before starting the rip.",
+            devpath,
+        )
+        drive_utils.drives_update()
+        drive = SystemDrives.query.filter_by(mount=devpath).first()
+
+    if drive is None:
+        known_mounts = sorted(
+            mount for (mount,) in db.session.query(SystemDrives.mount).all() if mount
+        )
+        known_drives = ", ".join(known_mounts) or "none"
+        raise utils.RipperException(
+            f"Optical drive {devpath} is missing from ARM's drive inventory after refresh. "
+            f"Known drive paths: {known_drives}. Check that the device is passed through "
+            "to the container and run a drive scan in Settings."
+        )
 
     # Duplicate udev events are normal on some optical drives. Check before creating a
     # Job object so a second launch cannot produce a false failure or touch the tray.
