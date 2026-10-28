@@ -837,3 +837,34 @@ img, video, canvas, iframe { max-width: 100%; }
 @media (max-width: 575.98px) {
   .arm-notification-drawer { bottom: .5rem; max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); }
 }
+
+
+/* Notification drawer email preference controls */
+.arm-notification-preferences {
+    margin: 1rem 0;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--arm-border, #d8dee8);
+    border-radius: 0.6rem;
+}
+.arm-notification-preferences h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+}
+.arm-notification-preference {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0;
+    padding: 0.55rem 0;
+    border-top: 1px solid var(--arm-border, #d8dee8);
+    cursor: pointer;
+}
+.arm-notification-preference input {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex: 0 0 auto;
+}
+.arm-notification-preference input:disabled {
+    cursor: not-allowed;
+}
