@@ -120,6 +120,8 @@ _SETTING_LABELS = {
     "HANDBRAKE_CLI": "HandBrake CLI Path",
     "HANDBRAKE_LOCAL": "Use Local HandBrake Binary",
     "MAINFEATURE": "Main Feature Track Selection",
+    "SMART_DISC_ANALYSIS": "Smart Blu-ray Playlist Warnings",
+    "INCREMENTAL_RIPPING": "Incremental Title Ripping",
     "HB_ARGS_DVD": "DVD HandBrake Arguments",
     "HB_ARGS_BD": "Blu-ray HandBrake Arguments",
     "FFMPEG_CLI": "FFmpeg CLI Path",

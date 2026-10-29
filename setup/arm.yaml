@@ -258,6 +258,14 @@ HANDBRAKE_LOCAL: HandBrakeCLI
 # However, it does not handle tv shows well at all.  This setting is only used when the video is identified as a movie.
 MAINFEATURE: false
 
+# Analyze near-identical Blu-ray title candidates using duration, size, chapters and segment maps.
+# Suspicious candidates are logged as warnings; they are never discarded based on these heuristics alone.
+SMART_DISC_ANALYSIS: true
+
+# Track successful individual title rips in a local manifest and retry failed/missing titles.
+# Defaults off. When enabled, title-at-a-time ripping is used so already-ripped features can be skipped.
+INCREMENTAL_RIPPING: false
+
 # Additional HandBrake arguments for DVDs.
 HB_ARGS_DVD: "--subtitle scan -F"
 
