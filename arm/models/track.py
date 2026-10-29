@@ -26,7 +26,7 @@ class Track(db.Model):
 
     def __init__(self, job_id, track_number, length, aspect_ratio,
                  fps, main_feature, source, basename, filename,
-                 chapters=0, filesize=0, playlist="", segment_map="")
+                 chapters=0, filesize=0, playlist="", segment_map=""):
         """Return a track object"""
         self.job_id = job_id
         self.track_number = track_number

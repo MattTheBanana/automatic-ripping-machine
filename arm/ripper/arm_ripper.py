@@ -136,7 +136,10 @@ def rip_visual_media(have_dupes, job, logfile, protection):
         job.status = JobState.VIDEO_RIPPING.value
         db.session.commit()
         makemkv_out_path = _run_makemkv(job)
-        if getattr(job, "_arm_incremental_skipped", False):
+        if (
+            getattr(job, "_arm_incremental_skipped", False)
+            or getattr(job, "_arm_incremental_all_titles_skipped", False)
+        ):
             logging.info(
                 "Incremental rip: an existing verified main-feature output was found; skipping transcode and move."
             )
