@@ -122,7 +122,7 @@ function updateProgress(job) {
         setProgressBar(job.job_id, "current_title_progress",
             job.current_title_progress_round !== undefined ? job.current_title_progress_round : job.progress_round);
         setProgressBar(job.job_id, "total_progress", job.total_progress_round);
-        updateContents($(`#jobId${job.job_id}_eta`), job, "ETA for current title", job.eta || "Unknown");
+        updateProgressEta(job, true);
     } else if (checkTranscodeStatus(job)) {
         const progressBar = document.getElementById(`jobId${job.job_id}_progress_bar`);
         const wasMakeMKV = document.getElementById(`jobId${job.job_id}_total_progress_bar`);
@@ -131,7 +131,7 @@ function updateProgress(job) {
         }
         updateContents($(`#jobId${job.job_id}_stage`), job, "Stage", job.stage || "Working");
         setProgressBar(job.job_id, "progress", job.progress_round);
-        updateContents($(`#jobId${job.job_id}_eta`), job, "ETA", job.eta || "Unknown");
+        updateProgressEta(job, false);
         const curFpsDiv = $(`#jobId${job.job_id}_cur_fps`);
         const avgFpsDiv = $(`#jobId${job.job_id}_avg_fps`);
         if (job.cur_fps === undefined || job.cur_fps === "-1") curFpsDiv.hide();
@@ -198,6 +198,60 @@ function updateContents(item, _job, keyString, itemContents) {
  * @param {Class} oldJob    Old job used to compare against fresh job from api
  * @param {Class} job     Fresh job pulled from api
  */
+function updateProgressEta(job, estimateFromProgress) {
+    const node = document.getElementById("jobId" + job.job_id + "_eta");
+    if (!node) return;
+    const valueNode = node.querySelector(".arm-progress-eta-value");
+    if (!valueNode) return;
+
+    const sourceEta = String(job.eta === null || job.eta === undefined ? "" : job.eta).trim();
+    const normalizedEta = sourceEta.toLowerCase();
+    const usableServerEta = sourceEta !== "" &&
+        !["unknown", "none", "null", "-", "-1", "n/a", "nan"].includes(normalizedEta);
+    let displayEta = usableServerEta ? sourceEta : "";
+
+    if (!displayEta && estimateFromProgress) {
+        const rawProgress = job.current_title_progress_round !== undefined
+            ? job.current_title_progress_round : job.progress_round;
+        const progress = Number(rawProgress);
+        if (Number.isFinite(progress) && progress >= 0 && progress < 100) {
+            const now = Date.now();
+            const previousProgress = Number(node.dataset.lastProgressPercent);
+            const previousAt = Number(node.dataset.lastProgressAt);
+            let secondsPerPercent = Number(node.dataset.secondsPerPercent);
+            if (!Number.isFinite(previousProgress) || !Number.isFinite(previousAt) ||
+                    progress < previousProgress - 0.5) {
+                node.dataset.lastProgressPercent = String(progress);
+                node.dataset.lastProgressAt = String(now);
+                node.dataset.secondsPerPercent = "";
+                secondsPerPercent = NaN;
+            } else if (progress > previousProgress + 0.05) {
+                const elapsed = (now - previousAt) / 1000;
+                const candidate = elapsed / (progress - previousProgress);
+                if (elapsed > 0 && Number.isFinite(candidate) && candidate >= 0.05 && candidate <= 7200) {
+                    secondsPerPercent = Number.isFinite(secondsPerPercent)
+                        ? secondsPerPercent * 0.65 + candidate * 0.35 : candidate;
+                    node.dataset.secondsPerPercent = String(secondsPerPercent);
+                }
+                node.dataset.lastProgressPercent = String(progress);
+                node.dataset.lastProgressAt = String(now);
+            }
+            if (Number.isFinite(secondsPerPercent) && secondsPerPercent > 0) {
+                const remaining = Math.max(0, Math.round((100 - progress) * secondsPerPercent));
+                displayEta = "~ " + formatElapsedSeconds(remaining) + " remaining";
+            }
+        }
+    }
+
+    node.hidden = !displayEta;
+    if (displayEta) valueNode.textContent = displayEta;
+}
+
+/**
+ * Function that goes through the whole job card and updates outdated values
+ * @param {Class} oldJob    Old job used to compare against fresh job from API
+ * @param {Class} job     Fresh job pulled from API
+ */
 function updateJobItem(oldJob, job) {
     // Rebuild a double-feature card when either feature's visible metadata changes.
     const hasDoubleFeature = hasDisplayValue(oldJob.secondary_title) || hasDisplayValue(job.secondary_title);
@@ -220,9 +274,9 @@ function updateJobItem(oldJob, job) {
     const posterUrl = $(`#jobId${job.job_id}_poster_url`);
     const status = $(`#jobId${job.job_id}_status`);
     // Keep the title header consistent with manual title overrides and optional year.
-    const updatedCardTitle = titleManual(job);
-    if (cardHeader[0].innerText !== updatedCardTitle) {
-        cardHeader[0].innerText = updatedCardTitle;
+    const updatedCardTitle = titleHeaderMarkup(job);
+    if (cardHeader[0].innerHTML !== updatedCardTitle) {
+        cardHeader[0].innerHTML = updatedCardTitle;
     }
     // Update card poster image
     if (job.poster_url !== posterUrl[0].src && job.poster_url !== "None" && job.poster_url !== "N/A") {
@@ -235,7 +289,6 @@ function updateJobItem(oldJob, job) {
         status[0].title = job.status;
     }
     // Go through and update job values as needed
-    updateContents($(`#jobId${job.job_id}_year`), job, "Year", job.year);
     updateContents($(`#jobId${job.job_id}_devpath`), job, "Device", job.display_device || job.devpath || "—");
     updateContents($(`#jobId${job.job_id}_video_type`), job, "Type", mediaTypeLabel(job.video_type));
     const metadataNode = document.getElementById(`jobId${job.job_id}_disc_metadata`);

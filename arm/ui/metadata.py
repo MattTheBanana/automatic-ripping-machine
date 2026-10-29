@@ -220,6 +220,103 @@ def tmdb_process_results(poster_base, return_results, search_results, media_type
     return return_results
 
 
+def smart_title_candidate(
+    results,
+    query,
+    label=None,
+    year=None,
+    season_number=None,
+    episode_start=None,
+    endpoint=None,
+    model=None,
+):
+    """Ask an optional local Ollama model to choose among real metadata candidates."""
+    candidates = list(results or [])[:20]
+    base_url = str(endpoint or "").strip().rstrip("/")
+    model_name = str(model or "").strip()
+    if not candidates or not base_url or not model_name:
+        return None
+
+    if base_url.endswith("/api/chat"):
+        chat_url = base_url
+    elif base_url.endswith("/api"):
+        chat_url = base_url + "/chat"
+    else:
+        chat_url = base_url + "/api/chat"
+    parsed_url = urllib.parse.urlparse(chat_url)
+    if parsed_url.scheme not in ("http", "https") or not parsed_url.netloc:
+        return None
+
+    compact_candidates = []
+    for index, item in enumerate(candidates):
+        compact_candidates.append({
+            "index": index,
+            "title": item.get("Title") or item.get("title") or item.get("name") or "",
+            "year": item.get("Year") or item.get("year") or "",
+            "type": item.get("Type") or item.get("type") or "",
+            "overview": item.get("Plot") or item.get("overview") or "",
+            "popularity": item.get("popularity"),
+            "vote_average": item.get("vote_average"),
+            "vote_count": item.get("vote_count"),
+        })
+
+    request_context = {
+        "disc_label": str(label or ""),
+        "parsed_title": str(query or ""),
+        "year_hint": str(year or ""),
+        "season_number": season_number,
+        "episode_start": episode_start,
+        "candidates": compact_candidates,
+    }
+    payload = {
+        "model": model_name,
+        "stream": False,
+        "format": "json",
+        "options": {"temperature": 0},
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You disambiguate movie and television metadata for an optical-disc ripper. "
+                    "Choose only from the provided candidate list. Do not invent or browse for "
+                    "other titles. Normalize misspellings, spacing and disc suffixes such as WS. "
+                    "Use year, media type, plot, popularity and franchise context together. An "
+                    "exact short-title match is not automatically best: prefer a well-known "
+                    "franchise installment when the title and synopsis support it. Respect explicit "
+                    "season/episode hints. Return JSON with integer index and confidence from 0 to 1. "
+                    "Use index -1 and confidence 0 when none is a confident match."
+                ),
+            },
+            {"role": "user", "content": json.dumps(request_context, ensure_ascii=False)},
+        ],
+    }
+    response = requests.post(chat_url, json=payload, timeout=(3, 45))
+    response.raise_for_status()
+    response_payload = response.json()
+    message = response_payload.get("message") if isinstance(response_payload, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, dict):
+        decision = content
+    elif isinstance(content, str):
+        try:
+            decision = json.loads(content)
+        except ValueError:
+            app.logger.warning("Optional smart title resolver returned invalid JSON.")
+            return None
+    else:
+        return None
+
+    try:
+        index = int(decision.get("index", decision.get("candidate_index", -1)))
+        confidence = float(decision.get("confidence", 0))
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if index < 0 or index >= len(candidates) or confidence < 0.6:
+        app.logger.info("Optional smart title resolver was not confident enough to select a candidate.")
+        return None
+    return candidates[index]
+
+
 def tmdb_get_imdb(tmdb_id):
     """
     Queries api.themoviedb.org for imdb_id by TMDB id\n

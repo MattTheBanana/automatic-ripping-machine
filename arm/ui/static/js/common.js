@@ -138,7 +138,8 @@ function addJobItem(job, authenticated) {
         : "col-md-6 col-xl-4 arm-job-column";
     let x = `<div class="${columnClass}" id="jobId${job.job_id}">`;
     x += `<div class="card arm-job-card mx-auto${doubleFeature ? " arm-job-card-double-feature" : ""}">`;
-    x += `<div class="card-header text-center arm-job-card-header"><strong id="jobId${job.job_id}_header">${escapeHtml(titleManual(job))}</strong></div>`;
+    x += "<div class=\"card-header arm-job-card-header\"><div id=\"jobId" + job.job_id +
+        "_header\" class=\"arm-job-title-header\">" + titleHeaderMarkup(job) + "</div></div>";
     if (doubleFeature) {
         x += `<div class="arm-job-double-feature-media">${featureSummaryMarkup(job, false)}${featureSummaryMarkup(job, true)}</div>`;
         x += `<div class="arm-job-double-feature-details">${buildMiddleSection(job)}${buildRightSection(job, idsplit, authenticated)}</div>`;
@@ -146,7 +147,7 @@ function addJobItem(job, authenticated) {
     } else {
         x += `<div class="row no-gutters arm-job-card-content">`;
         x += `<div class="arm-job-poster-column"><a href="${detailUrl}">${posterCheck(job)}</a>${buildJobActions(job, idsplit, authenticated, serverJob)}</div>`;
-        x += `<div class="arm-job-details-column">${buildMiddleSection(job)}${buildRightSection(job, idsplit, authenticated)}</div>`;
+        x += `<div class="arm-job-details-column">${buildMiddleSection(job, false)}${buildRightSection(job, idsplit, authenticated)}<div id="jobId${job.job_id}_progress_section" class="arm-job-progress-section">${transcodingCheck(job)}</div></div>`;
         x += "</div>";
     }
     x += "</div></div>";
@@ -176,26 +177,29 @@ function progressBarMarkup(job, key, heading, subtitle, percentage) {
 }
 
 function makeMKVProgressMarkup(job) {
-    let x = `<div id="jobId${job.job_id}_stage"><strong>Stage: </strong>${escapeHtml(job.stage || "Reading disc")}</div>`;
-    x += progressBarMarkup(
+    let x = progressBarMarkup(
         job, "total_progress", "Total disc progress",
         job.total_progress_title || "Entire disc", job.total_progress_round
     );
     x += progressBarMarkup(
         job, "current_title_progress", "Current title",
-        job.current_title || "Current title", job.current_title_progress_round !== undefined ? job.current_title_progress_round : job.progress_round
+        job.current_title || "Current title",
+        job.current_title_progress_round !== undefined ? job.current_title_progress_round : job.progress_round
     );
-    x += `<div id="jobId${job.job_id}_eta"><strong>ETA for current title: </strong>${escapeHtml(job.eta || "Unknown")}</div>`;
+    x += "<div id=\"jobId" + job.job_id + "_eta\" class=\"arm-progress-eta\" hidden>" +
+        "<strong>ETA for current title: </strong><span class=\"arm-progress-eta-value\"></span></div>";
     return x;
 }
 
 function standardProgressMarkup(job) {
     const value = progressPercent(job.progress_round);
-    let x = `<div id="jobId${job.job_id}_stage"><strong>Stage: </strong>${escapeHtml(job.stage || "Working")}</div>`;
-    x += progressBarMarkup(job, "progress", "Progress", "", value);
-    x += `<div id="jobId${job.job_id}_eta"><strong>ETA: </strong>${escapeHtml(job.eta || "Unknown")}</div>`;
-    x += `<div id="jobId${job.job_id}_cur_fps"><strong>CUR FPS: </strong>${escapeHtml(job.cur_fps || "—")}</div>`;
-    x += `<div id="jobId${job.job_id}_avg_fps"><strong>AVG FPS: </strong>${escapeHtml(job.avg_fps || "—")}</div>`;
+    let x = progressBarMarkup(job, "progress", "Progress", "", value);
+    x += "<div id=\"jobId" + job.job_id + "_eta\" class=\"arm-progress-eta\" hidden>" +
+        "<strong>ETA: </strong><span class=\"arm-progress-eta-value\"></span></div>";
+    x += "<div id=\"jobId" + job.job_id + "_cur_fps\"><strong>CUR FPS: </strong>" +
+        escapeHtml(job.cur_fps || "—") + "</div>";
+    x += "<div id=\"jobId" + job.job_id + "_avg_fps\"><strong>AVG FPS: </strong>" +
+        escapeHtml(job.avg_fps || "—") + "</div>";
     return x;
 }
 
@@ -264,23 +268,58 @@ function setProgressBar(jobId, key, percentage) {
     if (label) label.textContent = `${value.toFixed(1)}%`;
 }
 
+function formatStartDateTime(value) {
+    const timestamp = Date.parse(value);
+    if (!Number.isFinite(timestamp)) return "";
+    const date = new Date(timestamp);
+    const preferences = document.getElementById("joblist");
+    const dateFormat = preferences && preferences.dataset.startDateFormat
+        ? preferences.dataset.startDateFormat : "MM/DD/YYYY";
+    const timeFormat = preferences && preferences.dataset.startTimeFormat
+        ? preferences.dataset.startTimeFormat : "12h";
+    const yyyy = String(date.getFullYear());
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    let formattedDate = mm + "/" + dd + "/" + yyyy;
+    if (dateFormat === "YYYY-MM-DD") formattedDate = yyyy + "-" + mm + "-" + dd;
+    else if (dateFormat === "DD/MM/YYYY") formattedDate = dd + "/" + mm + "/" + yyyy;
+    else if (dateFormat === "MM-DD-YYYY") formattedDate = mm + "-" + dd + "-" + yyyy;
+
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    let formattedTime;
+    if (timeFormat === "24h") {
+        formattedTime = String(hours).padStart(2, "0") + ":" + minutes;
+    } else {
+        const suffix = hours >= 12 ? "PM" : "AM";
+        hours = hours % 12 || 12;
+        formattedTime = String(hours) + ":" + minutes + " " + suffix;
+    }
+    return formattedDate + " " + formattedTime;
+}
+
 function transcodingCheck(job) {
-    let x = `<div id="jobId${job.job_id}_progress_details">`;
+    let x = "<div class=\"arm-job-progress-summary\">";
+    x += "<div id=\"jobId" + job.job_id + "_progress_details\" class=\"arm-job-progress-details\">";
     x += buildProgressMarkup(job);
     x += buildProgressHealth(job);
     x += "</div>";
-    const start = Date.parse(job.start_time);
-    if (Number.isFinite(start)) {
-        const d = new Date(start);
-        const datestring = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        x += `<div><strong>Start:</strong> ${datestring} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}</div>`;
+    const start = formatStartDateTime(job.start_time);
+    if (start) {
+        x += "<div class=\"arm-job-progress-times\"><div><strong>Start:</strong> " +
+            escapeHtml(start) + "</div>";
+    } else {
+        x += "<div class=\"arm-job-progress-times\">";
     }
     const elapsed = job.elapsed_seconds === null || job.elapsed_seconds === undefined
         ? 0 : Math.max(0, Number(job.elapsed_seconds) || 0);
     const running = !["success", "fail"].includes(String(job.status || "").toLowerCase());
     const elapsedText = job.job_length && job.job_length !== "None" && !running
         ? job.job_length : formatElapsedSeconds(elapsed);
-    x += `<div id="jobId${job.job_id}_elapsed"><strong>Elapsed Job Time:</strong> <span class="arm-elapsed-time" data-elapsed-seconds="${elapsed}" data-running="${running}">${elapsedText}</span></div>`;
+    x += "<div id=\"jobId" + job.job_id + "_elapsed\"><strong>Elapsed Job Time:</strong> " +
+        "<span class=\"arm-elapsed-time\" data-elapsed-seconds=\"" + elapsed +
+        "\" data-running=\"" + running + "\">" + escapeHtml(elapsedText) + "</span></div>";
+    x += "</div></div>";
     return x;
 }
 function musicCheck(job, idsplit) {
@@ -344,25 +383,59 @@ function featureSummaryMarkup(job, secondary) {
     </article>`;
 }
 
-function titleManual(job) {
+function titleParts(job) {
     const manualTitle = job.title_manual && job.title_manual !== "None" ? job.title_manual : job.title;
     const rawTitle = hasDisplayValue(manualTitle) ? String(manualTitle).trim() : "";
     const title = ["undefined", "unknown", "not identified", "video", "dvd", "disc", "disk", "untitled"].includes(rawTitle.toLowerCase())
         ? "Title not set" : (rawTitle || "Title not set");
-    const year = hasDisplayValue(job.year) ? ` (${job.year})` : "";
-    const secondTitle = hasDisplayValue(job.secondary_title) ? String(job.secondary_title).trim() : "";
-    const secondYear = hasDisplayValue(job.secondary_year) ? ` (${job.secondary_year})` : "";
-    return `${title}${year}${secondTitle ? ` + ${secondTitle}${secondYear}` : ""}`;
+    return {
+        title: title,
+        year: hasDisplayValue(job.year) ? String(job.year) : "",
+        secondaryTitle: hasDisplayValue(job.secondary_title) ? String(job.secondary_title).trim() : "",
+        secondaryYear: hasDisplayValue(job.secondary_year) ? String(job.secondary_year) : ""
+    };
 }
 
-function buildMiddleSection(job) {
+function titleManual(job) {
+    const parts = titleParts(job);
+    return parts.title + (parts.year ? " (" + parts.year + ")" : "") +
+        (parts.secondaryTitle ? " + " + parts.secondaryTitle +
+        (parts.secondaryYear ? " (" + parts.secondaryYear + ")" : "") : "");
+}
+
+function titleHeaderMarkup(job) {
+    const parts = titleParts(job);
+    let markup = "<div class=\"arm-job-title-line\"><span class=\"arm-job-title-name\">" +
+        escapeHtml(parts.title) + "</span>" +
+        "<span class=\"arm-job-title-year\">" + escapeHtml(parts.year) + "</span></div>";
+    if (parts.secondaryTitle) {
+        markup += "<div class=\"arm-job-title-line arm-job-title-secondary-line\">" +
+            "<span class=\"arm-job-title-name\">+ " + escapeHtml(parts.secondaryTitle) + "</span>" +
+            "<span class=\"arm-job-title-year\">" + escapeHtml(parts.secondaryYear) + "</span></div>";
+    }
+    return markup;
+}
+
+function buildMiddleSection(job, includeProgress = true) {
     let x = "<div class=\"arm-job-info-column\"><div class=\"card-body px-2 py-2\">";
-    x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${escapeHtml(job.year || "—")}</div>`;
-    x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${escapeHtml(mediaTypeLabel(job.video_type))}</div>`;
-    x += `<div id="jobId${job.job_id}_devpath"><strong>Device: </strong>${escapeHtml(job.display_device || job.devpath || "—")}</div>`;
-    x += `<div id="jobId${job.job_id}_disc_metadata" class="arm-job-metadata">${buildDiscMetadataBadges(job)}</div>`;
-    x += `<div><strong>Status: </strong><img id="jobId${job.job_id}_status" class="arm-job-status-icon" src="/static/img/${escapeHtml(job.status)}.png" width="20" height="20" alt="${escapeHtml(job.status)}" title="${escapeHtml(job.status)}"></div>`;
-    x += `<div id="jobId${job.job_id}_progress_section">${transcodingCheck(job)}</div>`;
+    x += "<div id=\"jobId" + job.job_id + "_video_type\"><strong>Type: </strong>" +
+        escapeHtml(mediaTypeLabel(job.video_type)) + "</div>";
+    x += "<div id=\"jobId" + job.job_id + "_devpath\"><strong>Device: </strong>" +
+        escapeHtml(job.display_device || job.devpath || "—") + "</div>";
+    x += "<div id=\"jobId" + job.job_id + "_disc_metadata\" class=\"arm-job-metadata\">" +
+        buildDiscMetadataBadges(job) + "</div>";
+    const stage = job.stage || (job.status === "ripping" ? "Reading disc" : "Working");
+    x += "<div class=\"arm-rip-status-stage-line\">";
+    x += "<div class=\"arm-rip-status\"><strong>Status: </strong>" +
+        "<img id=\"jobId" + job.job_id + "_status\" class=\"arm-job-status-icon\" " +
+        "src=\"/static/img/" + escapeHtml(job.status) + ".png\" width=\"20\" height=\"20\" " +
+        "alt=\"" + escapeHtml(job.status) + "\" title=\"" + escapeHtml(job.status) + "\"></div>";
+    x += "<div id=\"jobId" + job.job_id + "_stage\" class=\"arm-rip-stage\"><strong>Stage: </strong>" +
+        escapeHtml(stage) + "</div></div>";
+    if (includeProgress) {
+        x += "<div id=\"jobId" + job.job_id + "_progress_section\" class=\"arm-job-progress-section\">" +
+            transcodingCheck(job) + "</div>";
+    }
     x += "</div></div>";
     return x;
 }

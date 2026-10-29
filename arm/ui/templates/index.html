@@ -47,7 +47,9 @@
         </div>
         <div class="row h-100 align-items-center">
             <div class="col-md-12 mx-auto">
-                <div id="joblist" class="card-deck"></div>
+                <div id="joblist" class="card-deck"
+                     data-start-date-format="{{ armui_cfg.start_date_format|default('MM/DD/YYYY', true) }}"
+                     data-start-time-format="{{ armui_cfg.start_time_format|default('12h', true) }}"></div>
             </div>
         </div>
     </div>

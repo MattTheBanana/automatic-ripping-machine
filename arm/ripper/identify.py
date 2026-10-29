@@ -17,6 +17,7 @@ import xmltodict
 import xml.parsers.expat
 import arm.config.config as cfg
 from arm.models import Job
+from arm.models.ui_settings import UISettings
 
 from arm.ripper import utils
 from arm.ripper.ProcessHandler import arm_subprocess
@@ -25,6 +26,7 @@ from arm.media_metadata import parse_media_label, select_best_media_result
 
 # flake8: noqa: W605
 from arm.ui import utils as ui_utils
+from arm.ui.metadata import smart_title_candidate
 
 
 def find_mount(devpath: str) -> str | None:
@@ -327,17 +329,41 @@ def update_job(job, search_results):
         return None
 
     parsed_label = parse_media_label(getattr(job, "label", None))
-    selected = select_best_media_result(
-        search_results["Search"],
-        title=parsed_label.get("title") or job.title,
-        year=parsed_label.get("year") or job.year,
-        prefer_series=bool(getattr(job, "season_number", None) or getattr(job, "episode_start", None)),
-    )
+    preferred_title = parsed_label.get("title") or job.title
+    preferred_year = parsed_label.get("year") or job.year
+    prefer_series = bool(getattr(job, "season_number", None) or getattr(job, "episode_start", None))
+    selected = None
+    try:
+        ui_settings = UISettings.query.get(1)
+        if ui_settings and ui_settings.smart_title_matching_enabled:
+            selected = smart_title_candidate(
+                search_results["Search"],
+                query=preferred_title,
+                label=getattr(job, "label", None),
+                year=preferred_year,
+                season_number=getattr(job, "season_number", None),
+                episode_start=getattr(job, "episode_start", None),
+                endpoint=ui_settings.smart_title_matching_url,
+                model=ui_settings.smart_title_matching_model,
+            )
+            if selected:
+                logging.info("Optional smart title resolver selected a metadata candidate.")
+    except Exception as error:
+        logging.warning("Optional smart title resolver failed; using normal matching: %s", error)
+    if selected is None:
+        selected = select_best_media_result(
+            search_results["Search"],
+            title=preferred_title,
+            year=preferred_year,
+            prefer_series=prefer_series,
+        )
     if selected is None:
         return None
     result = selected
     new_year = result.get("Year", "")
-    title = utils.clean_for_filename(result.get("Title", ""))
+    # Keep provider punctuation (including colons) in job metadata/UI. Filename
+    # sanitization remains centralized in fix_job_title when output paths are built.
+    title = str(result.get("Title", "") or "").strip()
     imdb_id = result.get("imdbID")
     tmdb_id = result.get("id") or result.get("tmdbID")
 

@@ -87,6 +87,26 @@ def _fallback_split_compound(value):
     return []
 
 
+def _strip_disc_format_suffix(value):
+    """Remove known trailing disc-format tags using bounded token checks."""
+    tokens = str(value or "").split()
+    suffixes = {
+        "ws", "widescreen", "fs", "fullscreen", "16x9", "4x3", "pal", "ntsc",
+        "dvd", "blu-ray", "bluray", "ac3", "dts", "dd5", "dd5.1", "remux", "hdtv",
+    }
+    while len(tokens) > 1:
+        last = tokens[-1].casefold().strip(".,;:()[]{}")
+        if last == "screen" and len(tokens) > 1 and tokens[-2].casefold() == "full":
+            del tokens[-2:]
+        elif last == "ray" and len(tokens) > 1 and tokens[-2].casefold() == "blu":
+            del tokens[-2:]
+        elif last in suffixes:
+            tokens.pop()
+        else:
+            break
+    return " ".join(tokens)
+
+
 def title_search_variants(title):
     """Produce ordered, distinct query variants for joined-word disc labels."""
     raw = str(title or "").strip()
@@ -95,6 +115,7 @@ def title_search_variants(title):
     normalized = re.sub(r"[_+]+", " ", raw)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     variants = []
+    query_base = _strip_disc_format_suffix(normalized)
 
     def add(value):
         value = re.sub(r"\s+", " ", str(value or "")).strip()
@@ -102,6 +123,7 @@ def title_search_variants(title):
             variants.append(value)
 
     add(normalized)
+    add(query_base)
     camel = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", normalized)
     camel = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", camel)
     add(camel)
@@ -232,6 +254,7 @@ def parse_media_label(label):
     for pattern in patterns:
         working = re.sub(pattern, " ", working, flags=re.IGNORECASE)
     working = re.sub(r"\b(?:DVD|BLU[- ]?RAY|PAL|NTSC|16X9)\b", " ", working, flags=re.IGNORECASE)
+    working = _strip_disc_format_suffix(working)
     working = re.sub(r"\bSKU\b.*$", " ", working, flags=re.IGNORECASE)
     working = re.sub(r"[\[\](){}]", " ", working)
     working = re.sub(r"[^A-Za-z0-9\s'-]", " ", working)

@@ -82,6 +82,11 @@ class TestMediaFolderNaming(unittest.TestCase):
         self.assertIsNone(anime["episode_start"])
         self.assertIsNone(anime["episode_end"])
 
+    def test_disc_label_parser_removes_widescreen_suffix(self):
+        parsed = parse_media_label("Mr Mrs Smith Ws")
+        self.assertEqual(parsed["title"], "Mr Mrs Smith")
+        self.assertIn("Mr Mrs Smith", title_search_variants("Mr Mrs Smith Ws"))
+
     def test_explicit_season_episode_range_and_disc_are_detected(self):
         label = parse_media_label("SHERLOCK_S01E01-E03_DISC02")
         self.assertEqual(label["title"], "Sherlock")

@@ -150,3 +150,45 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 - Defaults are declared in `setup/arm.yaml`; descriptions are in `arm/ui/comments.json`. The drawer saves changes through the authenticated `/notificationpreferences` endpoint, using the session CSRF token.
 - Email category filtering is applied in `arm/ripper/utils.py` before SMTP/Gmail delivery. Local database notifications, Apprise, and post-processing scripts are unchanged by these email-only preferences. Error wording takes precedence over completion wording when a message mentions both.
 - Focused categorization tests are in `test/unittest/test_notification_preferences.py`. Run them with `PYTHONPATH=. pytest -q test/unittest/test_notification_preferences.py`; runtime tests still need to be run in a project environment.
+
+
+## Current development notes (2026-10-28)
+
+### Repository and pull requests
+
+- The verified `main` HEAD is `d5635f034958bfd5a705228b45a14989255ce18d` (PR #19 merge, log text selection/copy improvements).
+- **PR #20 — Refresh missing optical drives before starting a rip** remains open and mergeable: https://github.com/MattTheBanana/automatic-ripping-machine/pull/20. Last verified head: `bdc157010f45f5b278567d9929fbd583ed54f7a6`. It retries drive inventory discovery when a `/dev/srN` job has no matching database row and adds MakeMKV failure diagnostics. Recheck CI and update the branch if the merged base changes.
+- **PR #21 — Add optional smart title resolution and refine rip progress UI** is open: https://github.com/MattTheBanana/automatic-ripping-machine/pull/21. Initial head: `0c2562067e24977fee891d375a057db3e1cf24b2`; this branch includes the follow-up lint fix and this handover update. Check the latest head/CI before review or merge.
+- PR #21's first Quality Checks run failed at lint for `E128` in `arm/ui/metadata.py` and `E303` in `arm/ui/settings/settings.py`; both were corrected in follow-up commit `32d5c1df9c9ddb477a44a161b535ddeb317c33cf`. On that SHA, Python lint, Python/JavaScript CodeQL, the focused Python 3.10 tests, and Python 3.9/3.11 UI smoke tests passed; Python 3.12 and Docker were still running when last checked, then the Docker build also passed. A later CSS-only regular-weight title correction and handover update triggered a new CI run; validate its exact head before merge.
+
+### Optional smart title matching and filename/display punctuation
+
+- Normal ARM matching remains the default. The opt-in resolver is implemented in `arm/ui/metadata.py:smart_title_candidate` and called from `arm/ripper/identify.py:update_job` only when `UISettings.smart_title_matching_enabled` is true.
+- The resolver asks a configured local Ollama endpoint to select an index from real TMDB/OMDb results (titles, years, media types, summaries and available popularity signals). The model cannot return a new title/ID for ARM to accept; selections outside the candidate list or below confidence 0.6 are rejected, and the existing deterministic matcher is the fallback.
+- Ollama is intentionally a **separate service**; ARM's base image does not install a model runtime, extra Python ML packages or weights. UI Settings asks for confirmation when enabling the feature and offers a button to request model-weight downloads from the configured Ollama URL. The endpoint must be reachable from inside the ARM container. Candidate text and summaries are sent to that configured local endpoint only when enabled.
+- Setup guidance is in `docs/optional-smart-title-resolution.md`; focused mocked resolver tests are in `test/unittest/test_optional_smart_title_resolution.py` and are included in the Python 3.10 CI test step in `.github/workflows/main.yml`. The schema migration is `arm/migrations/versions/a2b6c1d8e4f0_smart_title_datetime_settings.py`, which adds the date/time format fields and optional model configuration.
+- `arm/media_metadata.py` strips a set of common trailing mastering/format suffixes (including `WS`) for parsing/search variants using bounded token checks rather than a suffix regex, so `Mr Mrs Smith Ws` produces the cleaned query `Mr Mrs Smith`. Keep normalization conservative and retain the raw label as a query variant.
+- `arm/ripper/identify.py:update_job` now retains the provider's canonical title (including colon punctuation) in job metadata. Filename punctuation is still sanitized at the file/folder naming boundary in `arm/ripper/utils.py:clean_for_filename`/ `fix_job_title`; don't use filesystem-safe strings as display titles.
+
+### Active-rip UI and notification spacing
+
+- Active-card title rendering is in `arm/ui/static/js/common.js` and `arm/ui/static/css/arm-modern.css`: title left-aligned and regular weight; year aligned to its right in muted color without shrinking its font; the separate Year row is removed; Status and Stage share one line. Double-feature cards retain both feature rows.
+- Start timestamps support stored UI settings `start_date_format` and `start_time_format`; defaults are `MM/DD/YYYY` and 12-hour AM/PM. Settings are saved by `/save_ui_settings`.
+- ETA no longer displays a literal `Unknown` when ARM/MakeMKV has no ETA. The browser uses a valid reported ETA where available and otherwise estimates current-title time remaining only after observing progress movement; if too little progress exists to estimate, the field stays hidden.
+- The active progress summary uses a transparent, centered, lower-card-aligned layout. Toast stack spacing was tightened by removing each toast's bottom margin (the toast holder owns the gap) and reducing inner padding. Confirm appearance at desktop and mobile widths; CI does not run a visual browser check.
+
+### Current hardware investigation (requires the user's system)
+
+- Additional power appeared to help the LG BU40N, but the latest provided rip still logged repeated `ILLEGAL REQUEST: INVALID FIELD IN CDB` and failed to save MakeMKV title 30 (process exit code 1). This is separate from title disambiguation and is not evidence the smart matcher caused the rip failure. A drive/media/SCSI-command path problem remains possible; use a known-good Blu-ray, another drive/cable/enclosure if available, and the full MakeMKV progress/job logs before changing firmware again.
+- Tray auto-close remained after setting `dev.cdrom.autoclose=0`. That sysctl controls a kernel automatic-close behavior; it cannot block an explicit tray-close command from a process. `arm/models/system_drives.py:SystemDrives.eject(method="close")` explicitly invokes `eject --trayclose`, while `DriveUtils.update_tray_status` only polls status. No responsible process/timer is confirmed yet; trace the issuing process before attributing it to ARM or recommending another kernel setting.
+- The earlier `NoResultFound` error for an unregistered `/dev/sr3` fails during drive lookup before creating a rip job. PR #20 addresses that inventory path but does not establish the cause of the separate MakeMKV read/save failure.
+
+### Deployment / validation reminders
+
+- Changes on PR #21 do not update the running TrueNAS container or published `latest` image. Merge, confirm the custom image publish workflow succeeds, then pull/recreate the app; inspect image digest and ARM's displayed Git revision if it remains stale.
+- Apply the new Alembic migration on upgrade; test upgrade/downgrade on a database copy before production release. No actual Ollama service, browser visual test, or optical hardware is exercised by generic CI.
+
+
+### CodeQL follow-up (2026-10-28)
+
+- A CodeQL check on PR #21 reported a polynomial-time regex in disc-suffix parsing and two clear-text logging alerts on the resolver's title/year log arguments. The suffix operation now trims recognized trailing tokens without using that regex, and the selection log is static (no result fields are written to logs). Recheck the CodeQL status and inline annotations at the latest branch head before merge.

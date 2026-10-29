@@ -18,9 +18,13 @@ import platform
 import importlib
 import re
 import subprocess
+import threading
 import time
 from datetime import datetime
+from urllib.parse import urlsplit
 import os
+
+import requests
 
 import sqlalchemy
 
@@ -51,6 +55,12 @@ REDIRECT_SETTINGS = "route_settings.settings"
 # from frequently refreshed CPU, memory, and disk readings.
 _RESOURCE_HW_SUPPORT_CACHE = {"value": None, "updated_at": 0.0}
 _RESOURCE_HW_SUPPORT_CACHE_SECONDS = 300
+
+_TITLE_MODEL_PULL_LOCK = threading.Lock()
+_TITLE_MODEL_PULL_STATUS = {
+    "status": "idle",
+    "message": "Optional model weights have not been downloaded by ARM.",
+}
 
 
 # Human-readable titles for the advanced ripper configuration keys.
@@ -390,12 +400,96 @@ def save_ui_settings():
         arm_ui_cfg.show_job_min_length = bool(form.show_job_min_length.data)
         arm_ui_cfg.show_job_max_length = bool(form.show_job_max_length.data)
         arm_ui_cfg.device_display_mode = form.device_display_mode.data or "coded"
+        arm_ui_cfg.start_date_format = form.start_date_format.data or "MM/DD/YYYY"
+        arm_ui_cfg.start_time_format = form.start_time_format.data or "12h"
+        arm_ui_cfg.smart_title_matching_enabled = bool(form.smart_title_matching_enabled.data)
+        arm_ui_cfg.smart_title_matching_url = (
+            str(form.smart_title_matching_url.data or "").strip() or "http://ollama:11434"
+        )
+        arm_ui_cfg.smart_title_matching_model = (
+            str(form.smart_title_matching_model.data or "").strip() or "qwen2.5:3b"
+        )
         db.session.commit()
         success = True
+        # Refresh the global used by the active-rip template so format changes apply
+        # immediately without requiring a Flask restart.
+        app.jinja_env.globals.update(armui_cfg=UISettings.query.get(1))
     # Masking the jinja update, otherwise an error is thrown
     # sqlalchemy.orm.exc.DetachedInstanceError: Instance <UISettings at 0x7f294c109fd0>
     # app.jinja_env.globals.update(armui_cfg=arm_ui_cfg)
     return {'success': success, 'settings': str(arm_ui_cfg), 'form': 'arm ui settings'}
+
+
+def _pull_smart_title_model(endpoint, model_name):
+    """Download model weights from the configured Ollama service in a background thread."""
+    try:
+        parsed = urlsplit(endpoint)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError("Ollama URL must be an absolute HTTP or HTTPS URL.")
+        api_root = endpoint.rstrip("/")
+        pull_url = api_root + "/pull" if api_root.endswith("/api") else api_root + "/api/pull"
+        response = requests.post(
+            pull_url,
+            json={"name": model_name, "stream": False},
+            timeout=(5, 1800),
+        )
+        response.raise_for_status()
+        result = response.json()
+        if result.get("error"):
+            raise RuntimeError(str(result["error"]))
+        with _TITLE_MODEL_PULL_LOCK:
+            _TITLE_MODEL_PULL_STATUS.update(
+                status="success",
+                message="Model weights downloaded successfully.",
+            )
+        app.logger.info("Optional smart title model download completed.")
+    except Exception as error:
+        with _TITLE_MODEL_PULL_LOCK:
+            _TITLE_MODEL_PULL_STATUS.update(
+                status="error",
+                message="Model download failed: " + str(error)[:400],
+            )
+        app.logger.exception("Optional smart title model download failed.")
+
+
+@route_settings.route('/install_smart_title_model', methods=['POST'])
+@login_required
+def install_smart_title_model():
+    """Request an Ollama model pull; Ollama itself must already be installed separately."""
+    settings_row = UISettings.query.get(1)
+    if settings_row is None:
+        return jsonify({"success": False, "message": "UI settings are not initialized."}), 400
+    endpoint = str(
+        request.form.get("smart_title_matching_url") or settings_row.smart_title_matching_url or ""
+    ).strip()
+    model_name = str(
+        request.form.get("smart_title_matching_model") or settings_row.smart_title_matching_model or ""
+    ).strip()
+    if not endpoint or not model_name or len(model_name) > 128:
+        return jsonify({"success": False, "message": "Enter a valid Ollama URL and model name."}), 400
+    parsed = urlsplit(endpoint)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return jsonify({"success": False, "message": "Ollama URL must be an absolute HTTP or HTTPS URL."}), 400
+    with _TITLE_MODEL_PULL_LOCK:
+        if _TITLE_MODEL_PULL_STATUS.get("status") == "running":
+            return jsonify({"success": True, **_TITLE_MODEL_PULL_STATUS})
+        _TITLE_MODEL_PULL_STATUS.update(status="running", message="Connecting to Ollama and downloading model weights.")
+    worker = threading.Thread(
+        target=_pull_smart_title_model,
+        args=(endpoint, model_name),
+        name="arm-smart-title-model-pull",
+        daemon=True,
+    )
+    worker.start()
+    return jsonify({"success": True, "status": "running", "message": "Model download started."})
+
+
+@route_settings.route('/smart_title_model_status')
+@login_required
+def smart_title_model_status():
+    """Return the status of the optional Ollama model download."""
+    with _TITLE_MODEL_PULL_LOCK:
+        return jsonify(dict(_TITLE_MODEL_PULL_STATUS))
 
 
 @route_settings.route('/save_abcde_settings', methods=['POST'])
