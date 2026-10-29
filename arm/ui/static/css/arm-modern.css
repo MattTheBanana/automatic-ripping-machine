@@ -1070,7 +1070,7 @@ img, video, canvas, iframe { max-width: 100%; }
   display: flex; align-items: baseline; justify-content: space-between;
   gap: .75rem; width: 100%; text-align: left; line-height: 1.35;
 }
-.arm-job-title-name { min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+.arm-job-title-name { min-width: 0; overflow-wrap: anywhere; font-weight: 400; }
 .arm-job-title-year {
   flex: 0 0 auto; color: var(--arm-muted, #64748b); font-size: inherit;
   font-weight: 400; white-space: nowrap;

@@ -159,7 +159,7 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 - The verified `main` HEAD is `d5635f034958bfd5a705228b45a14989255ce18d` (PR #19 merge, log text selection/copy improvements).
 - **PR #20 — Refresh missing optical drives before starting a rip** remains open and mergeable: https://github.com/MattTheBanana/automatic-ripping-machine/pull/20. Last verified head: `bdc157010f45f5b278567d9929fbd583ed54f7a6`. It retries drive inventory discovery when a `/dev/srN` job has no matching database row and adds MakeMKV failure diagnostics. Recheck CI and update the branch if the merged base changes.
 - **PR #21 — Add optional smart title resolution and refine rip progress UI** is open: https://github.com/MattTheBanana/automatic-ripping-machine/pull/21. Initial head: `0c2562067e24977fee891d375a057db3e1cf24b2`; this branch includes the follow-up lint fix and this handover update. Check the latest head/CI before review or merge.
-- PR #21's first Quality Checks run failed only at the lint step for `E128` in `arm/ui/metadata.py` and `E303` in `arm/ui/settings/settings.py`; both findings were corrected in the follow-up commit. On the initial commit, Docker PR build and ShellCheck succeeded. The follow-up SHA must be validated separately.
+- PR #21's first Quality Checks run failed at lint for `E128` in `arm/ui/metadata.py` and `E303` in `arm/ui/settings/settings.py`; both were corrected in follow-up commit `32d5c1df9c9ddb477a44a161b535ddeb317c33cf`. On that SHA, Python lint, Python/JavaScript CodeQL, the focused Python 3.10 tests, and Python 3.9/3.11 UI smoke tests passed; Python 3.12 and Docker were still running when last checked, then the Docker build also passed. A later CSS-only regular-weight title correction and handover update triggered a new CI run; validate its exact head before merge.
 
 ### Optional smart title matching and filename/display punctuation
 
@@ -172,7 +172,7 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 
 ### Active-rip UI and notification spacing
 
-- Active-card title rendering is in `arm/ui/static/js/common.js` and `arm/ui/static/css/arm-modern.css`: title left-aligned; year aligned to its right in muted color without shrinking its font; the separate Year row is removed; Status and Stage share one line. Double-feature cards retain both feature rows.
+- Active-card title rendering is in `arm/ui/static/js/common.js` and `arm/ui/static/css/arm-modern.css`: title left-aligned and regular weight; year aligned to its right in muted color without shrinking its font; the separate Year row is removed; Status and Stage share one line. Double-feature cards retain both feature rows.
 - Start timestamps support stored UI settings `start_date_format` and `start_time_format`; defaults are `MM/DD/YYYY` and 12-hour AM/PM. Settings are saved by `/save_ui_settings`.
 - ETA no longer displays a literal `Unknown` when ARM/MakeMKV has no ETA. The browser uses a valid reported ETA where available and otherwise estimates current-title time remaining only after observing progress movement; if too little progress exists to estimate, the field stays hidden.
 - The active progress summary uses a transparent, centered, lower-card-aligned layout. Toast stack spacing was tightened by removing each toast's bottom margin (the toast holder owns the gap) and reducing inner padding. Confirm appearance at desktop and mobile widths; CI does not run a visual browser check.
@@ -181,7 +181,7 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 
 - Additional power appeared to help the LG BU40N, but the latest provided rip still logged repeated `ILLEGAL REQUEST: INVALID FIELD IN CDB` and failed to save MakeMKV title 30 (process exit code 1). This is separate from title disambiguation and is not evidence the smart matcher caused the rip failure. A drive/media/SCSI-command path problem remains possible; use a known-good Blu-ray, another drive/cable/enclosure if available, and the full MakeMKV progress/job logs before changing firmware again.
 - Tray auto-close remained after setting `dev.cdrom.autoclose=0`. That sysctl controls a kernel automatic-close behavior; it cannot block an explicit tray-close command from a process. `arm/models/system_drives.py:SystemDrives.eject(method="close")` explicitly invokes `eject --trayclose`, while `DriveUtils.update_tray_status` only polls status. No responsible process/timer is confirmed yet; trace the issuing process before attributing it to ARM or recommending another kernel setting.
-- The earlier (system) error for an unregistered `/dev/sr3` fails during drive lookup before creating a rip job. PR #20 addresses that inventory path but does not establish the cause of the separate MakeMKV read/save failure.
+- The earlier `NoResultFound` error for an unregistered `/dev/sr3` fails during drive lookup before creating a rip job. PR #20 addresses that inventory path but does not establish the cause of the separate MakeMKV read/save failure.
 
 ### Deployment / validation reminders
 
