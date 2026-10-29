@@ -347,8 +347,7 @@ def update_job(job, search_results):
                 model=ui_settings.smart_title_matching_model,
             )
             if selected:
-                logging.info("Optional smart title resolver selected: %s (%s)",
-                             selected.get("Title"), selected.get("Year"))
+                logging.info("Optional smart title resolver selected a metadata candidate.")
     except Exception as error:
         logging.warning("Optional smart title resolver failed; using normal matching: %s", error)
     if selected is None:

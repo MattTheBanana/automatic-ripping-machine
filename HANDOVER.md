@@ -167,7 +167,7 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 - The resolver asks a configured local Ollama endpoint to select an index from real TMDB/OMDb results (titles, years, media types, summaries and available popularity signals). The model cannot return a new title/ID for ARM to accept; selections outside the candidate list or below confidence 0.6 are rejected, and the existing deterministic matcher is the fallback.
 - Ollama is intentionally a **separate service**; ARM's base image does not install a model runtime, extra Python ML packages or weights. UI Settings asks for confirmation when enabling the feature and offers a button to request model-weight downloads from the configured Ollama URL. The endpoint must be reachable from inside the ARM container. Candidate text and summaries are sent to that configured local endpoint only when enabled.
 - Setup guidance is in `docs/optional-smart-title-resolution.md`; focused mocked resolver tests are in `test/unittest/test_optional_smart_title_resolution.py` and are included in the Python 3.10 CI test step in `.github/workflows/main.yml`. The schema migration is `arm/migrations/versions/a2b6c1d8e4f0_smart_title_datetime_settings.py`, which adds the date/time format fields and optional model configuration.
-- `arm/media_metadata.py` strips a set of common trailing mastering/format suffixes (including `WS`) for parsing/search variants, so `Mr Mrs Smith Ws` produces the cleaned query `Mr Mrs Smith`. Keep normalization conservative and retain the raw label as a query variant.
+- `arm/media_metadata.py` strips a set of common trailing mastering/format suffixes (including `WS`) for parsing/search variants using bounded token checks rather than a suffix regex, so `Mr Mrs Smith Ws` produces the cleaned query `Mr Mrs Smith`. Keep normalization conservative and retain the raw label as a query variant.
 - `arm/ripper/identify.py:update_job` now retains the provider's canonical title (including colon punctuation) in job metadata. Filename punctuation is still sanitized at the file/folder naming boundary in `arm/ripper/utils.py:clean_for_filename`/ `fix_job_title`; don't use filesystem-safe strings as display titles.
 
 ### Active-rip UI and notification spacing
@@ -187,3 +187,8 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 
 - Changes on PR #21 do not update the running TrueNAS container or published `latest` image. Merge, confirm the custom image publish workflow succeeds, then pull/recreate the app; inspect image digest and ARM's displayed Git revision if it remains stale.
 - Apply the new Alembic migration on upgrade; test upgrade/downgrade on a database copy before production release. No actual Ollama service, browser visual test, or optical hardware is exercised by generic CI.
+
+
+### CodeQL follow-up (2026-10-28)
+
+- A CodeQL check on PR #21 reported a polynomial-time regex in disc-suffix parsing and two clear-text logging alerts on the resolver's title/year log arguments. The suffix operation now trims recognized trailing tokens without using that regex, and the selection log is static (no result fields are written to logs). Recheck the CodeQL status and inline annotations at the latest branch head before merge.
