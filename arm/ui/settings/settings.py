@@ -607,14 +607,25 @@ def drive_eject(eject_id):
         app.logger.error(f"Drive eject encountered an error: {e}")
         flash(f"Cannot find drive {eject_id} in database.", "error")
         return redirect(url_for(REDIRECT_SETTINGS))
-    # block for running jobs
-    if drive.job_id_current:
-        drive.tray_status()  # update tray status
-        if not drive.open:  # allow closing
-            flash(f"Job [{drive.job_id_current}] in progress. Cannot eject {eject_id}.", "error")
-            return redirect(url_for(REDIRECT_SETTINGS))
-    # toggle open/close (with non-critical error)
-    if (error := drive.eject(method="toggle")) is not None:
+    # Refresh the live tray state before deciding whether this is an eject or close.
+    try:
+        drive.tray_status()
+    except OSError as error:
+        app.logger.warning("Cannot read tray state for %s: %s", drive.mount, error)
+        flash(f"Cannot read tray state for {drive.mount}: {error}", "error")
+        return redirect(url_for(REDIRECT_SETTINGS))
+
+    # Do not eject media while a job is using the drive, but allow closing an open tray.
+    if drive.job_id_current and not drive.open:
+        flash(f"Job [{drive.job_id_current}] in progress. Cannot eject {eject_id}.", "error")
+        return redirect(url_for(REDIRECT_SETTINGS))
+
+    # --traytoggle uses the CD-ROM ioctl path only and is unsupported by some drives.
+    # Use the normal eject command (which can try CD-ROM/SCSI methods) when closed,
+    # and the explicit tray-close operation when open.
+    method = "close" if drive.open else "eject"
+    if (error := drive.eject(method=method)) is not None:
+        app.logger.error("Drive %s command failed for %s: %s", method, drive.mount, error)
         flash(error, "error")
     return redirect(url_for(REDIRECT_SETTINGS))
 
