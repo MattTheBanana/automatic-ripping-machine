@@ -28,6 +28,7 @@ from arm.ripper.disc_analysis import (
     analyze_title_candidates,
     rank_main_feature_candidates,
 )
+from arm.ripper.utils import notify
 from arm.ui import db
 
 MAKEMKV_INFO_WAIT_TIME = 60  # [s]

@@ -95,6 +95,28 @@ def _run_makemkv(job):
         raise utils.RipperException("Error while running MakeMKV") from mkv_error
 
 
+def _handle_incremental_skip(job, makemkv_out_path):
+    """Finish a no-op incremental run without transcoding an empty raw directory."""
+    if not (
+        getattr(job, "_arm_incremental_skipped", False)
+        or getattr(job, "_arm_incremental_all_titles_skipped", False)
+    ):
+        return False
+
+    logging.info("Incremental rip found verified existing outputs; skipping transcode and move.")
+    utils.delete_raw_files([makemkv_out_path])
+    try:
+        os.rmdir(makemkv_out_path)
+    except OSError:
+        pass
+    if job.config.NOTIFY_RIP:
+        utils.notify(
+            job, constants.NOTIFY_TITLE,
+            f"{job.title} already has verified rip output; nothing needed to be ripped."
+        )
+    return True
+
+
 def rip_visual_media(have_dupes, job, logfile, protection):
     """
     Main ripping function for dvd and Blu-rays, movies or series
@@ -136,23 +158,7 @@ def rip_visual_media(have_dupes, job, logfile, protection):
         job.status = JobState.VIDEO_RIPPING.value
         db.session.commit()
         makemkv_out_path = _run_makemkv(job)
-        if (
-            getattr(job, "_arm_incremental_skipped", False)
-            or getattr(job, "_arm_incremental_all_titles_skipped", False)
-        ):
-            logging.info(
-                "Incremental rip: an existing verified main-feature output was found; skipping transcode and move."
-            )
-            utils.delete_raw_files([makemkv_out_path])
-            try:
-                os.rmdir(makemkv_out_path)
-            except OSError:
-                pass
-            if job.config.NOTIFY_RIP:
-                utils.notify(
-                    job, constants.NOTIFY_TITLE,
-                    f"{job.title} already has a verified main-feature output; nothing needed to be ripped."
-                )
+        if _handle_incremental_skip(job, makemkv_out_path):
             return
 
         if job.config.NOTIFY_RIP:
