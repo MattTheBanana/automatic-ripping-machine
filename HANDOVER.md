@@ -159,7 +159,7 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 - The verified `main` HEAD is `d5635f034958bfd5a705228b45a14989255ce18d` (PR #19 merge, log text selection/copy improvements).
 - **PR #20 — Refresh missing optical drives before starting a rip** is merged to `main`: https://github.com/MattTheBanana/automatic-ripping-machine/pull/20. Merge commit: `eca4a8cc40065fe289969d31ed054ac3086b153a`. It retries drive inventory discovery when a `/dev/srN` job has no matching database row and adds MakeMKV failure diagnostics.
 - **PR #21 — Add optional smart title resolution and refine rip progress UI** is merged to `main`: https://github.com/MattTheBanana/automatic-ripping-machine/pull/21. Merge commit: `e866a3226168f335e20bfb45bd7abb130b24a2f1`.
-- PR #21's first Quality Checks run failed at lint for `E128` in `arm/ui/metadata.py` and `E303` in `arm/ui/settings/settings.py`; both were corrected in follow-up commit `32d5c1df9c9ddb477a44a161b535ddeb317c33cf`. On that SHA, Python lint, Python/JavaScript CodeQL, the focused Python 3.10 tests, and Python 3.9/3.11 UI smoke tests passed; Python 3.12 and Docker were still running when last checked, then the Docker build also passed. A later CSS-only regular-weight title correction and handover update triggered a new CI run; validate its exact head before merge.
+- PR #21's early lint and CodeQL findings were fixed in follow-up commits. The merged PR head `672a370d7d512e512165f67fbe6de108b9ad0ce3` passed Quality Checks (Python 3.9–3.12 UI smoke coverage, Python/JavaScript CodeQL and focused tests) and the Docker PR build before merge.
 
 ### Optional smart title matching and filename/display punctuation
 
@@ -185,7 +185,7 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 
 ### Deployment / validation reminders
 
-- Changes on PR #21 do not update the running TrueNAS container or published `latest` image. Merge, confirm the custom image publish workflow succeeds, then pull/recreate the app; inspect image digest and ARM's displayed Git revision if it remains stale.
+- Source changes do not automatically update a running TrueNAS container or published `latest` image. After merging, confirm the custom image publish workflow succeeds, then pull/recreate the app; inspect the image digest and ARM's displayed Git revision if it remains stale.
 - Apply the new Alembic migration on upgrade; test upgrade/downgrade on a database copy before production release. No actual Ollama service, browser visual test, or optical hardware is exercised by generic CI.
 
 
