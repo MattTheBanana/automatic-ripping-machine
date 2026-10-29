@@ -23,6 +23,11 @@ import arm.config.config as cfg
 from arm.models import SystemDrives, Track
 from arm.models.job import JobState
 from arm.ripper import utils
+from arm.ripper.disc_analysis import (
+    DiscRipInventory,
+    analyze_title_candidates,
+    rank_main_feature_candidates,
+)
 from arm.ripper.utils import notify
 from arm.ui import db
 
@@ -182,9 +187,12 @@ class TrackID(enum.IntEnum):
     """
     Definition of the Track ID and its reference to the stored content
     """
+    DISC_TITLE = 2
     CHAPTERS = 8
     DURATION = 9
     FILESIZE = 11
+    PLAYLIST = 16
+    SEGMENT_MAP = 26
     FILENAME = 27
 
 
@@ -641,6 +649,42 @@ def get_drives(job):
             yield drive
 
 
+def get_disc_title(job):
+    """Read MakeMKV's disc-level title before ARM chooses its metadata query.
+
+    CINFO attribute 2 is preferred; attribute 30 is a fallback for versions that
+    expose the same display title under that attribute.
+    """
+    if getattr(job, "_arm_makemkv_disc_title_loaded", False):
+        return getattr(job, "makemkv_disc_title", None)
+
+    index = None
+    drive = getattr(job, "drive", None)
+    if drive is not None and getattr(drive, "mdisc", None) is not None:
+        index = drive.mdisc
+    if index is None:
+        for drive_info in get_drives(job):
+            if os.path.normpath(str(drive_info.mount)) == os.path.normpath(str(job.devpath)):
+                index = drive_info.index
+                break
+    if index is None:
+        logging.info("MakeMKV disc title unavailable: could not match %s to a MakeMKV drive index.", job.devpath)
+        job._arm_makemkv_disc_title_loaded = True
+        return getattr(job, "makemkv_disc_title", None)
+
+    titles = {}
+    for message in makemkv_info(job, select=OutputType.CINFO, index=int(index)):
+        if isinstance(message, CInfo) and message.id in (2, 30) and message.value.strip():
+            titles[message.id] = message.value.strip()
+    title = titles.get(2) or titles.get(30)
+    if title:
+        job.makemkv_disc_title = title
+        db.session.commit()
+        logging.info("MakeMKV provided a disc title for metadata identification.")
+    job._arm_makemkv_disc_title_loaded = True
+    return title or getattr(job, "makemkv_disc_title", None)
+
+
 def makemkv_backup(job, rawpath):
     """
     Rip BluRay with Backup Method
@@ -679,14 +723,47 @@ def makemkv_mkv(job, rawpath):
     # Get track info form mkv rip
     get_track_info(job.drive.mdisc, job)
     # route to ripping functions.
+    tracks = list(Track.query.filter_by(job_id=job.job_id).all())
+    if cfg.arm_config.get("SMART_DISC_ANALYSIS", True):
+        for candidate_warning in analyze_title_candidates(tracks):
+            left = candidate_warning["left"]
+            right = candidate_warning["right"]
+            logging.warning(
+                "Possible Blu-ray playlist decoys/variants: title #%s playlist=%s segments=%s "
+                "(%ss, %s bytes, %s chapters) vs title #%s playlist=%s segments=%s "
+                "(%ss, %s bytes, %s chapters): %s. This is a heuristic only; neither title is discarded.",
+                left["track_number"], left["playlist"] or "unknown", left["segment_map"] or "unavailable",
+                left["length"], left["filesize"], left["chapters"],
+                right["track_number"], right["playlist"] or "unknown", right["segment_map"] or "unavailable",
+                right["length"], right["filesize"], right["chapters"], candidate_warning["message"],
+            )
+
     if job.config.MAINFEATURE:
+        ranked_tracks = rank_main_feature_candidates(tracks)
+        if not ranked_tracks:
+            raise utils.RipperException("MakeMKV did not report any titles for main-feature selection")
+        track = ranked_tracks[0]
         logging.info(
-            "Trying to find mainfeature "
-            "(sorting by length desc, filesize desc, chapters desc, track_number asc)"
+            "Selected main-feature candidate #%s playlist=%s segments=%s length=%ss size=%s chapters=%s filename=%s",
+            track.track_number,
+            getattr(track, "playlist", "") or "unknown",
+            getattr(track, "segment_map", "") or "unavailable",
+            track.length,
+            track.filesize,
+            track.chapters,
+            track.filename,
         )
-        track = Track.query.filter_by(job_id=job.job_id).order_by(
-            Track.length.desc(), Track.filesize.desc(), Track.chapters.desc(), Track.track_number.asc()).first()
-        rip_mainfeature(job, track, rawpath)
+        if cfg.arm_config.get("INCREMENTAL_RIPPING", False):
+            inventory = _create_disc_inventory(job, tracks)
+            if inventory.has_successful_output(track):
+                logging.info(
+                    "Incremental ripping: selected main-feature title #%s already has a recorded successful output; "
+                    "skipping the optical read and transcode.",
+                    track.track_number,
+                )
+                job._arm_incremental_skipped = True
+                return
+        rip_mainfeature(job, track, rawpath, tracks=tracks)
     elif mode == 'manual':  # Run if mode is manual, user selects tracks
         # Set job status to waiting
         job.status = JobState.VIDEO_WAITING.value
@@ -706,7 +783,7 @@ def makemkv_mkv(job, rawpath):
             raise utils.RipperException("Manual mode: Timed out waiting for user input")
 
     # if no maximum length, process the whole disc in one command
-    elif int(job.config.MAXLENGTH) > 99998:
+    elif int(job.config.MAXLENGTH) > 99998 and not cfg.arm_config.get("INCREMENTAL_RIPPING", False):
         cmd = [
             "mkv",
         ]
@@ -720,6 +797,10 @@ def makemkv_mkv(job, rawpath):
         ]
         logging.info("Process all tracks from disc.")
         collections.deque(run(cmd, OutputType.MSG), maxlen=0)
+        # Seed the local inventory from verified title files even while incremental mode is off.
+        inventory = _create_disc_inventory(job, tracks)
+        for track in tracks:
+            inventory.record_success(track, os.path.join(rawpath, track.filename))
     else:
         process_single_tracks(job, rawpath, 'auto')
 
@@ -776,20 +857,28 @@ def makemkv(job):
     return rawpath
 
 
-def rip_mainfeature(job, track, rawpath):
-    """
-    Find and rip only the main feature when using Blu-rays
+def _create_disc_inventory(job, tracks):
+    """Create the local title-success inventory for this disc/job."""
+    inventory_root = os.path.join(str(job.config.LOGPATH), "disc-inventory")
+    return DiscRipInventory(
+        inventory_root,
+        getattr(job, "path", None),
+        getattr(job, "label", None),
+        getattr(job, "title", None),
+        getattr(job, "disctype", None),
+        tracks,
+        makemkv_disc_title=getattr(job, "makemkv_disc_title", None),
+    )
 
-    Parameters:
-        job: arm.models.job.Job
-        track: arm.models.track.Track
+
+def rip_mainfeature(job, track, rawpath, tracks=None):
+    """
+    Rip the selected main-feature candidate and persist success only after output verification.
     """
     logging.info(f"Processing track#{track.track_number} as mainfeature. Length is {track.length}s")
     filepathname = os.path.join(rawpath, track.filename)
     logging.info(f"Ripping track#{track.track_number} to {shlex.quote(filepathname)}")
-    cmd = [
-        "mkv",
-    ]
+    cmd = ["mkv"]
     cmd += shlex.split(job.config.MKV_ARGS)
     cmd += [
         f"--progress={progress_log(job)}",
@@ -799,8 +888,21 @@ def rip_mainfeature(job, track, rawpath):
         f"--minlength={job.config.MINLENGTH}",
     ]
     logging.info("Ripping main feature")
-    # Possibly update db to say track was ripped
     collections.deque(run(cmd, OutputType.MSG), maxlen=0)
+    if tracks is None:
+        tracks = list(Track.query.filter_by(job_id=job.job_id).all())
+    inventory = _create_disc_inventory(job, tracks)
+    aliases = [track.filename]
+    try:
+        aliases.append(f"{utils.fix_job_title(job)}.{job.config.DEST_EXT}")
+    except (AttributeError, TypeError, ValueError):
+        pass
+    if not inventory.record_success(track, filepathname, aliases=aliases):
+        logging.warning(
+            "MakeMKV returned after title #%s, but its output file was not verified as non-empty; "
+            "the incremental inventory will not mark it complete.",
+            track.track_number,
+        )
 
 
 def process_single_tracks(job, rawpath, mode: str):
@@ -835,6 +937,29 @@ def process_single_tracks(job, rawpath, mode: str):
     # Rip the track if the user has set it to rip, or in auto mode and the time is good
 
     tracks_to_process = [track for track in job.tracks if track.process]
+    inventory = _create_disc_inventory(job, list(job.tracks))
+    if cfg.arm_config.get("INCREMENTAL_RIPPING", False):
+        pending_tracks = []
+        for track in tracks_to_process:
+            if inventory.has_successful_output(track):
+                logging.info(
+                    "Incremental ripping: skipping previously successful title #%s (%s); "
+                    "its recorded output is still present and non-empty.",
+                    track.track_number, track.filename,
+                )
+            else:
+                pending_tracks.append(track)
+        skipped_count = len(tracks_to_process) - len(pending_tracks)
+        if skipped_count:
+            logging.info(
+                "Incremental ripping skipped %s verified title(s); %s title(s) will be attempted. "
+                "Failed titles and titles without verified output are retried.",
+                skipped_count, len(pending_tracks),
+            )
+            if not pending_tracks:
+                job._arm_incremental_all_titles_skipped = True
+        tracks_to_process = pending_tracks
+
     process_index = 1
     for track in tracks_to_process:
         logging.info(f"Processing track #{process_index} of {len(tracks_to_process)}. "
@@ -867,6 +992,12 @@ def process_single_tracks(job, rawpath, mode: str):
 
         logging.debug("Starting to rip single track.")
         collections.deque(run(cmd, OutputType.MSG), maxlen=0)
+        if not inventory.record_success(track, filepathname):
+            logging.warning(
+                "MakeMKV returned after title #%s, but its output file was not verified as non-empty; "
+                "the incremental inventory will not mark it complete.",
+                track.track_number,
+            )
         process_index += 1
 
 
@@ -1004,6 +1135,8 @@ class TrackInfoProcessor:
         self.stream_type = None
         self.chapters = 0
         self.filesize = 0
+        self.playlist = ""
+        self.segment_map = ""
 
     def process_messages(self):
         output_types = (
@@ -1021,10 +1154,20 @@ class TrackInfoProcessor:
         self._add_track()
 
     def _process_message(self, message):
-        if isinstance(message, (TInfo, SInfo)):
+        if isinstance(message, CInfo):
+            self._handle_cinfo(message)
+        elif isinstance(message, (TInfo, SInfo)):
             self._handle_track_or_stream_info(message)
         elif isinstance(message, Titles):
             self._handle_titles(message)
+
+    def _handle_cinfo(self, message):
+        if message.id in (2, 30) and message.value.strip():
+            candidate = message.value.strip()
+            current = str(getattr(self.job, "makemkv_disc_title", "") or "").strip()
+            if not current or message.id == 2:
+                self.job.makemkv_disc_title = candidate
+                db.session.commit()
 
     def _handle_track_or_stream_info(self, message):
         # Detect new track, add previous one if changed
@@ -1058,6 +1201,15 @@ class TrackInfoProcessor:
             self.chapters = int(message.value.strip())
         elif message.id == TrackID.FILESIZE:
             self.filesize = int(message.value.strip())
+        elif message.id == TrackID.PLAYLIST:
+            self.playlist = message.value.strip()
+        elif message.id == TrackID.SEGMENT_MAP:
+            self.segment_map = message.value.strip()
+        elif message.id == TrackID.DISC_TITLE:
+            candidate = message.value.strip()
+            if candidate and not getattr(self.job, "makemkv_disc_title", None):
+                self.job.makemkv_disc_title = candidate
+                db.session.commit()
 
     def _handle_titles(self, message):
         logging.info(f"Found {message.count:d} titles")
@@ -1076,7 +1228,9 @@ class TrackInfoProcessor:
             SOURCE,
             self.filename,
             self.chapters,
-            self.filesize
+            self.filesize,
+            self.playlist,
+            self.segment_map,
         )
         # Reset track info after adding if needed
         self.seconds = 0
@@ -1085,6 +1239,8 @@ class TrackInfoProcessor:
         self.filename = ""
         self.chapters = 0
         self.filesize = 0
+        self.playlist = ""
+        self.segment_map = ""
 
 
 def get_track_info(index, job):
@@ -1199,12 +1355,21 @@ class MakeMKVOutputChecker:
 
     def read_error(self):
         error_msg = self.data.sprintf[1]
+        if "OS error - This device does not exist" in error_msg:
+            logging.error(
+                "MakeMKV cannot access a referenced source while reading the disc. This can mean the optical "
+                "device/media became unavailable or the referenced Blu-ray STREAM file could not be opened. "
+                "Playlist analysis cannot repair a missing or unreadable stream. Check the drive/enclosure, "
+                "media, and complete MakeMKV progress log. Detail: %s",
+                self.data.message,
+            )
+            return MakeMKVErrorMessage(*dataclasses.astuple(self.data), self.data.message)
+
         log_func, debug_msg = self.READ_ERROR_MAP.get(error_msg, (logging.warning, None))
 
         if debug_msg:
             logging.debug(debug_msg)
 
-        # Choose message to log — prefer full message if debug_msg exists
         log_message = self.data.message if debug_msg else error_msg
         log_func(log_message)
 

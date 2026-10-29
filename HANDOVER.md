@@ -192,3 +192,15 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 ### CodeQL follow-up (2026-10-28)
 
 - A CodeQL check on PR #21 reported a polynomial-time regex in disc-suffix parsing and two clear-text logging alerts on the resolver's title/year log arguments. The suffix operation now trims recognized trailing tokens without using that regex, and the selection log is static (no result fields are written to logs). Recheck the CodeQL status and inline annotations at the latest branch head before merge.
+
+
+## Current development notes (2026-10-29)
+
+### Smart Blu-ray playlist analysis, MakeMKV title naming, and incremental ripping
+
+- Development branch: `feat/smart-disc-analysis-incremental-ripping`. The feature records MakeMKV TINFO playlist IDs (attribute 16) and ordered segment maps (attribute 26) on tracks. `arm/ripper/disc_analysis.py` compares close-duration/size candidates and logs matching or divergent segment maps. It does not discard titles automatically. Main-feature ranking gives MakeMKV's MainFeature-labelled near-longest candidate priority, then uses runtime, expected size, chapters and numeric title ID as tie-breakers.
+- MakeMKV CINFO title metadata (attribute 2, with attribute 30 as fallback) is now collected before Blu-ray title metadata lookup. ARM persists it on the job and uses it as a fallback/query only when the existing title is generic or merely repeats the disc label; a better XML/provider title is preserved.
+- `SMART_DISC_ANALYSIS` defaults to true; `INCREMENTAL_RIPPING` defaults to false. When incremental mode is enabled ARM rips title-by-title, records successful rips in one JSON file per detected disc layout under `LOGPATH/disc-inventory/`, and skips a title only if the matching record exists and a non-empty expected output still exists under the completed-media directory. Failed titles and records whose output is missing/empty are retried. Output records include playlist and segment-map data; the manifest is local and does not upload disc information.
+- MakeMKV's `OS error - This device does not exist` read error now logs a clearer device/media/stream-access diagnostic. This is distinct from playlist selection: it cannot be diagnosed definitively from that line alone. The supplied Catching Fire failure names `/BDMV/STREAM/03645.m2ts` at offset 0; use the complete MakeMKV progress log and verify device stability before concluding the stream itself is absent.
+- Focused tests are in `test/unittest/test_disc_analysis.py` and are included in the Python 3.10 CI test command. Migration `b7e3f1a9c2d4` adds the MakeMKV disc title, playlist and segment-map columns. Optical drive end-to-end validation remains outstanding.
+- No hosted crowd-sourced database or remote submissions are implemented in this branch because this repository has no service endpoint or privacy/consent contract for it. Do not claim the optional online community feature is available; any future integration should be disabled by default and explicitly opt-in.
