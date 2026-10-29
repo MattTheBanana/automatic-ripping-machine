@@ -936,6 +936,29 @@ def process_single_tracks(job, rawpath, mode: str):
     # Rip the track if the user has set it to rip, or in auto mode and the time is good
 
     tracks_to_process = [track for track in job.tracks if track.process]
+    inventory = _create_disc_inventory(job, list(job.tracks))
+    if cfg.arm_config.get("INCREMENTAL_RIPPING", False):
+        pending_tracks = []
+        for track in tracks_to_process:
+            if inventory.has_successful_output(track):
+                logging.info(
+                    "Incremental ripping: skipping previously successful title #%s (%s); "
+                    "its recorded output is still present and non-empty.",
+                    track.track_number, track.filename,
+                )
+            else:
+                pending_tracks.append(track)
+        skipped_count = len(tracks_to_process) - len(pending_tracks)
+        if skipped_count:
+            logging.info(
+                "Incremental ripping skipped %s verified title(s); %s title(s) will be attempted. "
+                "Failed titles and titles without verified output are retried.",
+                skipped_count, len(pending_tracks),
+            )
+            if not pending_tracks:
+                job._arm_incremental_all_titles_skipped = True
+        tracks_to_process = pending_tracks
+
     process_index = 1
     for track in tracks_to_process:
         logging.info(f"Processing track #{process_index} of {len(tracks_to_process)}. "
@@ -968,6 +991,12 @@ def process_single_tracks(job, rawpath, mode: str):
 
         logging.debug("Starting to rip single track.")
         collections.deque(run(cmd, OutputType.MSG), maxlen=0)
+        if not inventory.record_success(track, filepathname):
+            logging.warning(
+                "MakeMKV returned after title #%s, but its output file was not verified as non-empty; "
+                "the incremental inventory will not mark it complete.",
+                track.track_number,
+            )
         process_index += 1
 
 
