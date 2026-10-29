@@ -7,7 +7,7 @@ import re
 import tempfile
 
 
-_MAIN_FEATURE_RE = re.compile(r"main[\\W_]*feature", re.IGNORECASE)
+_MAIN_FEATURE_RE = re.compile(r"main[\W_]*feature", re.IGNORECASE)
 _GENERIC_LABELS = {"", "none", "unknown", "not identified", "unidentified", "video", "bluray", "blu-ray"}
 
 
@@ -19,7 +19,7 @@ def parse_segment_map(value):
         parts = str(value or "").split(",")
     segments = []
     for part in parts:
-        match = re.fullmatch(r"\\s*(\\d+)\\s*", str(part))
+        match = re.fullmatch(r"\s*(\d+)\s*", str(part))
         if match:
             segments.append(int(match.group(1)))
     return tuple(segments)
@@ -269,7 +269,7 @@ class DiscRipInventory:
             ) as handle:
                 temporary_path = handle.name
                 json.dump(self.data, handle, indent=2, sort_keys=True)
-                handle.write("\\n")
+                handle.write("\n")
             os.replace(temporary_path, self.path)
         except OSError as error:
             logging.warning("Could not save ARM disc inventory %s: %s", self.path, error)

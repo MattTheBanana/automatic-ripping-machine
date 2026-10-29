@@ -23,7 +23,11 @@ import arm.config.config as cfg
 from arm.models import SystemDrives, Track
 from arm.models.job import JobState
 from arm.ripper import utils
-from arm.ripper.disc_analysis import (\n    DiscRipInventory,\n    analyze_title_candidates,\n    rank_main_feature_candidates,\n)\nfrom arm.ripper.utils import notify
+from arm.ripper.disc_analysis import (
+    DiscRipInventory,
+    analyze_title_candidates,
+    rank_main_feature_candidates,
+)
 from arm.ui import db
 
 MAKEMKV_INFO_WAIT_TIME = 60  # [s]

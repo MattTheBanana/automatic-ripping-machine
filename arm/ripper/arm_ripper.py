@@ -136,6 +136,21 @@ def rip_visual_media(have_dupes, job, logfile, protection):
         job.status = JobState.VIDEO_RIPPING.value
         db.session.commit()
         makemkv_out_path = _run_makemkv(job)
+        if getattr(job, "_arm_incremental_skipped", False):
+            logging.info(
+                "Incremental rip: an existing verified main-feature output was found; skipping transcode and move."
+            )
+            utils.delete_raw_files([makemkv_out_path])
+            try:
+                os.rmdir(makemkv_out_path)
+            except OSError:
+                pass
+            if job.config.NOTIFY_RIP:
+                utils.notify(
+                    job, constants.NOTIFY_TITLE,
+                    f"{job.title} already has a verified main-feature output; nothing needed to be ripped."
+                )
+            return
 
         if job.config.NOTIFY_RIP:
             utils.notify(job, constants.NOTIFY_TITLE, f"{job.title} rip complete. Starting transcode. ")
