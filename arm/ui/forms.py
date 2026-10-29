@@ -70,6 +70,24 @@ class UiSettingsForm(FlaskForm):
         choices=[('coded', 'Device path (e.g. /dev/sr0)'), ('display', 'Configured drive name')],
         validators=[DataRequired()],
     )
+    start_date_format = SelectField(
+        'start_date_format',
+        choices=[
+            ('MM/DD/YYYY', 'MM/DD/YYYY (American)'),
+            ('YYYY-MM-DD', 'YYYY-MM-DD (ISO)'),
+            ('DD/MM/YYYY', 'DD/MM/YYYY'),
+            ('MM-DD-YYYY', 'MM-DD-YYYY'),
+        ],
+        validators=[DataRequired()],
+    )
+    start_time_format = SelectField(
+        'start_time_format',
+        choices=[('12h', '12-hour clock with AM/PM'), ('24h', '24-hour clock')],
+        validators=[DataRequired()],
+    )
+    smart_title_matching_enabled = BooleanField('smart_title_matching_enabled')
+    smart_title_matching_url = StringField('smart_title_matching_url', validators=[Optional()])
+    smart_title_matching_model = StringField('smart_title_matching_model', validators=[Optional()])
     submit = SubmitField('Submit')
 
 

@@ -1061,3 +1061,61 @@ img, video, canvas, iframe { max-width: 100%; }
 .arm-notification-preference input:disabled {
     cursor: not-allowed;
 }
+
+
+/* Active-rip title/year and compact, transparent progress summary. */
+.arm-job-card-header { text-align: left; }
+.arm-job-title-header { width: 100%; min-width: 0; }
+.arm-job-title-line {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: .75rem; width: 100%; text-align: left; line-height: 1.35;
+}
+.arm-job-title-name { min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+.arm-job-title-year {
+  flex: 0 0 auto; color: var(--arm-muted, #64748b); font-size: inherit;
+  font-weight: 400; white-space: nowrap;
+}
+.arm-job-title-secondary-line { margin-top: .2rem; }
+.arm-job-details-column { display: flex; flex-direction: column; min-height: 100%; }
+.arm-job-info-column .card-body { display: flex; flex-direction: column; min-height: 100%; }
+.arm-rip-status-stage-line {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: .25rem .85rem; margin-top: .15rem; text-align: center;
+}
+.arm-rip-status, .arm-rip-stage { display: inline-flex; align-items: center; gap: .25rem; }
+.arm-rip-stage { justify-content: flex-end; overflow-wrap: anywhere; }
+.arm-job-progress-section { width: 100%; margin-top: auto; text-align: center; }
+.arm-job-progress-summary {
+  display: flex; flex-direction: column; align-items: stretch; gap: .35rem;
+  width: 100%; margin-top: auto; padding: .4rem 0 0; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none; text-align: center;
+}
+.arm-job-progress-details { text-align: center; }
+.arm-progress-heading {
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: .1rem; text-align: center;
+}
+.arm-progress-heading span { text-align: center; }
+.arm-progress-eta { margin: .2rem 0; font-size: .82rem; text-align: center; }
+.arm-progress-health {
+  margin: .35rem 0 .1rem; padding: .2rem 0; border: 0;
+  background: transparent; text-align: center;
+}
+.arm-job-progress-times {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center;
+  gap: .25rem 1rem; margin-top: .2rem; font-size: .8rem; text-align: center;
+}
+.arm-job-progress-times > div { margin: 0; }
+
+/* Bootstrap adds a bottom margin to each toast; the holder already owns the inter-toast gap. */
+.arm-toast-holder { gap: .18rem; }
+.arm-toast-holder > .toast { margin-bottom: 0 !important; }
+.arm-toast .toast-header { padding: .35rem .55rem; }
+.arm-toast .toast-body { padding: .4rem .6rem; }
+
+@media (max-width: 575.98px) {
+  .arm-job-title-line { gap: .45rem; }
+  .arm-rip-status-stage-line { justify-content: center; }
+  .arm-rip-stage { justify-content: center; }
+  .arm-job-progress-times { gap: .2rem .65rem; }
+}

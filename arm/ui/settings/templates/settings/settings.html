@@ -156,6 +156,70 @@
                     $("[name='{{k}}']").addClass("is-invalid");
                 {% endfor %}
             {% endif %}
+            $("#smart_title_matching_enabled").on("change", function () {
+                if (this.checked && !window.confirm(
+                    "Enable optional local-model title matching? This sends disc labels and search candidates to your configured Ollama service. Ollama must be installed separately; use Download model to fetch the selected model weights. Continue?"
+                )) {
+                    this.checked = false;
+                }
+            });
+
+            let titleModelStatusTimer = null;
+            function refreshTitleModelStatus() {
+                $.getJSON("/smart_title_model_status").done(function (data) {
+                    $("#smartTitleModelStatus").text(data.message || data.status || "Model status unavailable.");
+                    if (data.status !== "running" && titleModelStatusTimer !== null) {
+                        window.clearInterval(titleModelStatusTimer);
+                        titleModelStatusTimer = null;
+                        $("#installSmartTitleModel").prop("disabled", false).text("Download model weights to Ollama");
+                    }
+                }).fail(function () {
+                    $("#smartTitleModelStatus").text("Could not read model download status.");
+                    if (titleModelStatusTimer !== null) {
+                        window.clearInterval(titleModelStatusTimer);
+                        titleModelStatusTimer = null;
+                    }
+                    $("#installSmartTitleModel").prop("disabled", false).text("Download model weights to Ollama");
+                });
+            }
+
+            $("#installSmartTitleModel").on("click", function () {
+                const endpoint = String($("#smart_title_matching_url").val() || "").trim();
+                const model = String($("#smart_title_matching_model").val() || "").trim();
+                if (!endpoint || !model) {
+                    $("#smartTitleModelStatus").text("Enter an Ollama URL and model name first.");
+                    return;
+                }
+                if (!window.confirm(
+                    "Download '" + model + "' to the configured Ollama server? This transfers model weights and can use several gigabytes of storage and memory. ARM itself will not install Ollama. Continue?"
+                )) return;
+
+                const button = $(this);
+                button.prop("disabled", true).text("Downloading model…");
+                $("#smartTitleModelStatus").text("Starting model download…");
+                $.ajax({
+                    url: "/install_smart_title_model",
+                    type: "POST",
+                    data: {
+                        csrf_token: $("#uiSettings input[name='csrf_token']").val(),
+                        smart_title_matching_url: endpoint,
+                        smart_title_matching_model: model
+                    }
+                }).done(function (data) {
+                    if (data.success !== true) {
+                        $("#smartTitleModelStatus").text(data.message || "Could not start model download.");
+                        button.prop("disabled", false).text("Download model weights to Ollama");
+                        return;
+                    }
+                    titleModelStatusTimer = window.setInterval(refreshTitleModelStatus, 3000);
+                    refreshTitleModelStatus();
+                }).fail(function (xhr) {
+                    const message = xhr.responseJSON && xhr.responseJSON.message;
+                    $("#smartTitleModelStatus").text(message || "Could not start model download. Check that Ollama is running and reachable.");
+                    button.prop("disabled", false).text("Download model weights to Ollama");
+                });
+            });
+
             activeTab("armsettings");
         });
     </script>

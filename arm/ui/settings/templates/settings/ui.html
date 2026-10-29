@@ -148,6 +148,53 @@
                     </div>
                 </div>
             </div>
+            <div class="card mt-4 arm-job-display-settings">
+                <div class="card-header">Start Date and Time Display</div>
+                <div class="card-body">
+                    <p class="text-muted">These formats affect Start timestamps on active ripping cards. Defaults use numbered American dates and AM/PM time.</p>
+                    <div class="form-group">
+                        <label for="start_date_format">Date format</label>
+                        <select class="form-control" id="start_date_format" name="start_date_format">
+                            <option value="MM/DD/YYYY" {% if ui_settings.start_date_format == 'MM/DD/YYYY' %}selected{% endif %}>MM/DD/YYYY (American)</option>
+                            <option value="YYYY-MM-DD" {% if ui_settings.start_date_format == 'YYYY-MM-DD' %}selected{% endif %}>YYYY-MM-DD (ISO)</option>
+                            <option value="DD/MM/YYYY" {% if ui_settings.start_date_format == 'DD/MM/YYYY' %}selected{% endif %}>DD/MM/YYYY</option>
+                            <option value="MM-DD-YYYY" {% if ui_settings.start_date_format == 'MM-DD-YYYY' %}selected{% endif %}>MM-DD-YYYY</option>
+                        </select>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label for="start_time_format">Time format</label>
+                        <select class="form-control" id="start_time_format" name="start_time_format">
+                            <option value="12h" {% if ui_settings.start_time_format != '24h' %}selected{% endif %}>12-hour clock with AM/PM</option>
+                            <option value="24h" {% if ui_settings.start_time_format == '24h' %}selected{% endif %}>24-hour clock</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="card mt-4 arm-job-display-settings">
+                <div class="card-header">Optional Smart Title Matching</div>
+                <div class="card-body">
+                    <p class="text-muted">Optional local language-model reranking helps with abbreviations, typos, and ambiguous franchise titles. ARM sends the disc label and metadata search candidates (including available summaries) to your configured Ollama service. When disabled, ARM uses its standard matcher.</p>
+                    <p class="text-muted">Ollama must be installed and reachable separately. ARM's base image does not include a model runtime or weights. Save the URL/model, then use Download model to pull the weights to Ollama; the download may be several gigabytes and use CPU/RAM. If the model is unavailable, ripping continues with standard matching.</p>
+                    <div class="custom-control custom-checkbox mb-3">
+                        <input id="smart_title_matching_enabled" class="custom-control-input" type="checkbox"
+                               name="smart_title_matching_enabled" {% if ui_settings.smart_title_matching_enabled %}checked{% endif %}>
+                        <label class="custom-control-label" for="smart_title_matching_enabled">Enable smart title matching</label>
+                    </div>
+                    <div class="form-group">
+                        <label for="smart_title_matching_url">Ollama URL reachable from the ARM container</label>
+                        <input class="form-control" id="smart_title_matching_url" name="smart_title_matching_url"
+                               value="{{ ui_settings.smart_title_matching_url or 'http://ollama:11434' }}" maxlength="512">
+                        <small class="form-text text-muted">Use the Ollama service name on a shared Docker network, or a reachable host address; localhost means the ARM container itself.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="smart_title_matching_model">Model name</label>
+                        <input class="form-control" id="smart_title_matching_model" name="smart_title_matching_model"
+                               value="{{ ui_settings.smart_title_matching_model or 'qwen2.5:3b' }}" maxlength="128">
+                    </div>
+                    <button type="button" class="btn btn-outline-primary" id="installSmartTitleModel">Download model weights to Ollama</button>
+                    <p id="smartTitleModelStatus" class="form-text text-muted mt-2 mb-0" role="status" aria-live="polite">Model weights are installed on the configured Ollama service, not inside ARM.</p>
+                </div>
+            </div>
             <button id="uiSubmit" class="btn btn-secondary btn-lg btn-block" form="uiSettings"
                     type="submit">
                 Submit

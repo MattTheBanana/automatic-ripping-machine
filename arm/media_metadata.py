@@ -95,6 +95,11 @@ def title_search_variants(title):
     normalized = re.sub(r"[_+]+", " ", raw)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     variants = []
+    query_base = re.sub(
+        r"\s+(?:ws|widescreen|fs|full\s*screen|fullscreen|16x9|4x3|pal|ntsc|dvd|"
+        r"blu[\s-]?ray|bluray|ac3|dts|dd5(?:[.]1)?|remux|hdtv)\s*$",
+        "", normalized, flags=re.IGNORECASE
+    ).strip()
 
     def add(value):
         value = re.sub(r"\s+", " ", str(value or "")).strip()
@@ -102,6 +107,7 @@ def title_search_variants(title):
             variants.append(value)
 
     add(normalized)
+    add(query_base)
     camel = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", normalized)
     camel = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", camel)
     add(camel)
@@ -232,6 +238,10 @@ def parse_media_label(label):
     for pattern in patterns:
         working = re.sub(pattern, " ", working, flags=re.IGNORECASE)
     working = re.sub(r"\b(?:DVD|BLU[- ]?RAY|PAL|NTSC|16X9)\b", " ", working, flags=re.IGNORECASE)
+    working = re.sub(
+        r"\s+\b(?:WS|FS|WIDESCREEN|FULLSCREEN|FULL\s+SCREEN)\b\s*$",
+        " ", working, flags=re.IGNORECASE
+    )
     working = re.sub(r"\bSKU\b.*$", " ", working, flags=re.IGNORECASE)
     working = re.sub(r"[\[\](){}]", " ", working)
     working = re.sub(r"[^A-Za-z0-9\s'-]", " ", working)
