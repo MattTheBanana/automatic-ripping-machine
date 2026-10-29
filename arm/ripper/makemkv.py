@@ -796,6 +796,10 @@ def makemkv_mkv(job, rawpath):
         ]
         logging.info("Process all tracks from disc.")
         collections.deque(run(cmd, OutputType.MSG), maxlen=0)
+        # Seed the local inventory from verified title files even while incremental mode is off.
+        inventory = _create_disc_inventory(job, tracks)
+        for track in tracks:
+            inventory.record_success(track, os.path.join(rawpath, track.filename))
     else:
         process_single_tracks(job, rawpath, 'auto')
 
