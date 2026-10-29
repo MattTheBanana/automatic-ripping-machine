@@ -196,6 +196,7 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 
 ## Configurable audio/dub and subtitle language preservation (2026-10-29)
 
+- Implementation PR: https://github.com/MattTheBanana/automatic-ripping-machine/pull/22. The changes are on an open feature branch; do not describe them as merged or deployed until the PR is merged and the custom image is rebuilt/pulled.
 - New settings `RIP_AUDIO_LANGUAGES` and `RIP_SUBTITLE_LANGUAGES` default to `all`. In Ripper Settings, each accepts `all` or a comma-separated list of ISO 639-2 three-letter language codes (for example `eng,spa,fra`). They apply independently to audio/dubs and subtitles.
 - `arm/ripper/track_selection.py` builds MakeMKV's `app_DefaultSelectionString` and safely updates `/home/arm/.MakeMKV/settings.conf` while preserving the registration key and unrelated preferences. `makemkv()` applies this after `prep_mkv()` ensures the MakeMKV settings file/key exists.
 - The same language preferences replace HandBrake's language/track-selection flags in `arm/ripper/handbrake.py:correct_hb_settings`, preventing the default subtitle scan/forced-only options from silently dropping ordinary subtitle tracks from transcoded output. Other HandBrake options remain in place. Audio and subtitle selection flags in `HB_ARGS_DVD`/`HB_ARGS_BD` are deliberately superseded by these explicit language settings.
