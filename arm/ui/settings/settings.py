@@ -420,8 +420,6 @@ def save_ui_settings():
     return {'success': success, 'settings': str(arm_ui_cfg), 'form': 'arm ui settings'}
 
 
-
-
 def _pull_smart_title_model(endpoint, model_name):
     """Download model weights from the configured Ollama service in a background thread."""
     try:

@@ -220,8 +220,16 @@ def tmdb_process_results(poster_base, return_results, search_results, media_type
     return return_results
 
 
-def smart_title_candidate(results, query, label=None, year=None, season_number=None,
-                         episode_start=None, endpoint=None, model=None):
+def smart_title_candidate(
+    results,
+    query,
+    label=None,
+    year=None,
+    season_number=None,
+    episode_start=None,
+    endpoint=None,
+    model=None,
+):
     """Ask an optional local Ollama model to choose among real metadata candidates."""
     candidates = list(results or [])[:20]
     base_url = str(endpoint or "").strip().rstrip("/")
