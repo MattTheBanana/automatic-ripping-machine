@@ -21,10 +21,12 @@ class Track(db.Model):
     process = db.Column(db.Boolean)
     chapters = db.Column(db.Integer, default=0)
     filesize = db.Column(db.BigInteger, default=0)
+    playlist = db.Column(db.String(32))
+    segment_map = db.Column(db.Text)
 
     def __init__(self, job_id, track_number, length, aspect_ratio,
                  fps, main_feature, source, basename, filename,
-                 chapters=0, filesize=0):
+                 chapters=0, filesize=0, playlist="", segment_map="")
         """Return a track object"""
         self.job_id = job_id
         self.track_number = track_number
@@ -39,6 +41,8 @@ class Track(db.Model):
         self.process = False
         self.chapters = chapters
         self.filesize = filesize
+        self.playlist = playlist
+        self.segment_map = segment_map
 
     def __repr__(self):
         return f'<Track {self.track_number}>'
