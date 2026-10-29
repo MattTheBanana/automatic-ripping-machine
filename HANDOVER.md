@@ -157,9 +157,9 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 ### Repository and pull requests
 
 - The verified `main` HEAD is `d5635f034958bfd5a705228b45a14989255ce18d` (PR #19 merge, log text selection/copy improvements).
-- **PR #20 — Refresh missing optical drives before starting a rip** remains open and mergeable: https://github.com/MattTheBanana/automatic-ripping-machine/pull/20. Last verified head: `bdc157010f45f5b278567d9929fbd583ed54f7a6`. It retries drive inventory discovery when a `/dev/srN` job has no matching database row and adds MakeMKV failure diagnostics. Recheck CI and update the branch if the merged base changes.
-- **PR #21 — Add optional smart title resolution and refine rip progress UI** is open: https://github.com/MattTheBanana/automatic-ripping-machine/pull/21. Initial head: `0c2562067e24977fee891d375a057db3e1cf24b2`; this branch includes the follow-up lint fix and this handover update. Check the latest head/CI before review or merge.
-- PR #21's first Quality Checks run failed at lint for `E128` in `arm/ui/metadata.py` and `E303` in `arm/ui/settings/settings.py`; both were corrected in follow-up commit `32d5c1df9c9ddb477a44a161b535ddeb317c33cf`. On that SHA, Python lint, Python/JavaScript CodeQL, the focused Python 3.10 tests, and Python 3.9/3.11 UI smoke tests passed; Python 3.12 and Docker were still running when last checked, then the Docker build also passed. A later CSS-only regular-weight title correction and handover update triggered a new CI run; validate its exact head before merge.
+- **PR #20 — Refresh missing optical drives before starting a rip** is merged to `main`: https://github.com/MattTheBanana/automatic-ripping-machine/pull/20. Merge commit: `eca4a8cc40065fe289969d31ed054ac3086b153a`. It retries drive inventory discovery when a `/dev/srN` job has no matching database row and adds MakeMKV failure diagnostics.
+- **PR #21 — Add optional smart title resolution and refine rip progress UI** is merged to `main`: https://github.com/MattTheBanana/automatic-ripping-machine/pull/21. Merge commit: `e866a3226168f335e20bfb45bd7abb130b24a2f1`.
+- PR #21's early lint and CodeQL findings were fixed in follow-up commits. The merged PR head `672a370d7d512e512165f67fbe6de108b9ad0ce3` passed Quality Checks (Python 3.9–3.12 UI smoke coverage, Python/JavaScript CodeQL and focused tests) and the Docker PR build before merge.
 
 ### Optional smart title matching and filename/display punctuation
 
@@ -185,10 +185,20 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 
 ### Deployment / validation reminders
 
-- Changes on PR #21 do not update the running TrueNAS container or published `latest` image. Merge, confirm the custom image publish workflow succeeds, then pull/recreate the app; inspect image digest and ARM's displayed Git revision if it remains stale.
+- Source changes do not automatically update a running TrueNAS container or published `latest` image. After merging, confirm the custom image publish workflow succeeds, then pull/recreate the app; inspect the image digest and ARM's displayed Git revision if it remains stale.
 - Apply the new Alembic migration on upgrade; test upgrade/downgrade on a database copy before production release. No actual Ollama service, browser visual test, or optical hardware is exercised by generic CI.
 
 
 ### CodeQL follow-up (2026-10-28)
 
 - A CodeQL check on PR #21 reported a polynomial-time regex in disc-suffix parsing and two clear-text logging alerts on the resolver's title/year log arguments. The suffix operation now trims recognized trailing tokens without using that regex, and the selection log is static (no result fields are written to logs). Recheck the CodeQL status and inline annotations at the latest branch head before merge.
+
+
+## Configurable audio/dub and subtitle language preservation (2026-10-29)
+
+- Implementation PR: https://github.com/MattTheBanana/automatic-ripping-machine/pull/22. The changes are on an open feature branch; do not describe them as merged or deployed until the PR is merged and the custom image is rebuilt/pulled.
+- New settings `RIP_AUDIO_LANGUAGES` and `RIP_SUBTITLE_LANGUAGES` default to `all`. In Ripper Settings, each accepts `all` or a comma-separated list of ISO 639-2 three-letter language codes (for example `eng,spa,fra`). They apply independently to audio/dubs and subtitles.
+- `arm/ripper/track_selection.py` builds MakeMKV's `app_DefaultSelectionString` and safely updates `/home/arm/.MakeMKV/settings.conf` while preserving the registration key and unrelated preferences. `makemkv()` applies this after `prep_mkv()` ensures the MakeMKV settings file/key exists.
+- The same language preferences replace HandBrake's language/track-selection flags in `arm/ripper/handbrake.py:correct_hb_settings`, preventing the default subtitle scan/forced-only options from silently dropping ordinary subtitle tracks from transcoded output. Other HandBrake options remain in place. Audio and subtitle selection flags in `HB_ARGS_DVD`/`HB_ARGS_BD` are deliberately superseded by these explicit language settings.
+- With both settings set to `all`, MakeMKV uses `+sel:all`; HandBrake uses `--all-audio --all-subtitles`. A custom list limits each stream type separately. Invalid values log a warning and fall back to all languages rather than silently dropping tracks.
+- Regression coverage is in `test/unittest/test_track_selection.py` and is included in the focused Python 3.10 CI test command. End-to-end DVD/Blu-ray testing and confirmation of the final transcoded audio/subtitle inventory still require a real disc and running ARM container.
