@@ -52,7 +52,7 @@
                     {% elif k == 'RIP_SUBTITLE_LANGUAGES' %}
                         {% set subtitle_value = v|string|lower|trim %}
                         {% set subtitle_mode = 'all' if subtitle_value in ['', 'all', 'any'] else ('none' if subtitle_value == 'none' else 'selected') %}
-                        {% set subtitle_codes = [] if subtitle_mode != 'selected' else subtitle_value.split(',') %}
+                        {% set subtitle_codes = [] if subtitle_mode != 'selected' else subtitle_value.split(',')|map('trim')|list %}
                         <div class="arm-subtitle-selection">
                             <select id="armSubtitleMode" class="form-control" aria-label="Subtitle selection mode"
                                     {% if ripper_read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
@@ -87,7 +87,7 @@
                             </select>
                             <input id="armSettingRIP_SUBTITLE_LANGUAGES" type="hidden"
                                    name="RIP_SUBTITLE_LANGUAGES" value="{{ v }}">
-                            <small class="form-text text-muted">Select one or more languages. Every matching subtitle track in those languages is retained.</small>
+                            <small class="form-text text-muted">Select one or more languages (use Ctrl/Cmd to choose multiple). Every matching subtitle track in those languages is retained.</small>
                         </div>
                     {% else %}
                         <input id="armSetting{{ k }}" type="text" class="form-control" aria-label="{{ k }}" name="{{ k }}"
