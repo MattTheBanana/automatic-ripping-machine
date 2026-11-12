@@ -226,13 +226,19 @@ RIPMETHOD_BR: "PLACEHOLDER"
 # MKV_ARGS: "--debug=-stdout"  # this will enable more detailed logging
 MKV_ARGS: ""
 
-# Analyze near-identical Blu-ray title candidates using duration, size, chapters and segment maps.
-# Warnings are advisory; candidates are never discarded automatically based only on this analysis.
+# Analyze near-identical Blu-ray title candidates; warnings never discard titles.
 SMART_DISC_ANALYSIS: true
 
-# Track successful individual title rips in a local manifest and retry failed/missing titles.
-# Defaults off. When enabled, ARM rips titles one at a time so already-ripped features can be skipped.
+# Skip verified successful titles in per-title MakeMKV ripping (not full-disc backup).
 INCREMENTAL_RIPPING: false
+
+# Audio/dub languages retained by MakeMKV and HandBrake.
+# Use "all" to keep every language, or a comma-separated list of ISO 639-2 codes (e.g. "eng,spa").
+RIP_AUDIO_LANGUAGES: "all"
+
+# Subtitle languages retained by MakeMKV and HandBrake.
+# Use "all" to keep every language, or a comma-separated list of ISO 639-2 codes (e.g. "eng,spa").
+RIP_SUBTITLE_LANGUAGES: "all"
 
 # Remove any files created in the raw and transcode paths for the job after processing is complete
 DELRAWFILES: true

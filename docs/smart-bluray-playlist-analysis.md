@@ -10,6 +10,8 @@ MAINFEATURE selection prioritizes titles MakeMKV labels MainFeature only when th
 
 ## Incremental rip mode
 
+Incremental title skipping applies to per-title MakeMKV ripping. Blu-ray backup modes (`backup` or `backup_dvd`) still perform a full-disc backup and do not skip individual titles.
+
 Set INCREMENTAL_RIPPING: true to rip one title at a time and skip titles recorded as successful whose expected output file is still present and non-empty under the completed-media directory. ARM stores one JSON inventory per detected disc layout below LOGPATH/disc-inventory/; records include title fingerprints, playlists and segment maps.
 
 A title is added to the inventory only after MakeMKV returns successfully and a non-empty source file exists. Failed titles and titles without a verified output are retried. The feature defaults off. The inventory is local to ARM and does not upload disc labels, titles, playlists, segments, or other media information.

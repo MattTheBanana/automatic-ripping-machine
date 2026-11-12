@@ -23,6 +23,7 @@ import arm.config.config as cfg
 from arm.models import SystemDrives, Track
 from arm.models.job import JobState
 from arm.ripper import utils
+from arm.ripper.track_selection import configure_makemkv_track_selection
 from arm.ripper.disc_analysis import (
     DiscRipInventory,
     analyze_title_candidates,
@@ -693,6 +694,11 @@ def makemkv_backup(job, rawpath):
         job: arm.models.job.Job
         rawpath:
     """
+    if cfg.arm_config.get("INCREMENTAL_RIPPING", False):
+        logging.warning(
+            "INCREMENTAL_RIPPING is not supported by Blu-ray backup mode; "
+            "the full disc will still be backed up."
+        )
     # backup method
     cmd = [
         "backup",
@@ -724,7 +730,7 @@ def makemkv_mkv(job, rawpath):
     get_track_info(job.drive.mdisc, job)
     # route to ripping functions.
     tracks = list(Track.query.filter_by(job_id=job.job_id).all())
-    if cfg.arm_config.get("SMART_DISC_ANALYSIS", True):
+    if job.disctype == "bluray" and cfg.arm_config.get("SMART_DISC_ANALYSIS", True):
         for candidate_warning in analyze_title_candidates(tracks):
             left = candidate_warning["left"]
             right = candidate_warning["right"]
@@ -816,6 +822,10 @@ def makemkv(job):
     """
     # confirm MKV is working, beta key hasn't expired
     prep_mkv()
+    configure_makemkv_track_selection(
+        cfg.arm_config.get("RIP_AUDIO_LANGUAGES", "all"),
+        cfg.arm_config.get("RIP_SUBTITLE_LANGUAGES", "all"),
+    )
     logging.info(f"Starting MakeMKV rip. Method is {job.config.RIPMETHOD}")
     # get MakeMKV disc number
     # Fix: Check if job.drive is None before accessing job.drive.mdisc

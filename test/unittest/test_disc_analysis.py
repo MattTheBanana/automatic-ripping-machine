@@ -68,6 +68,11 @@ def test_incremental_inventory_requires_record_and_existing_nonempty_output(tmp_
     assert (log_dir / f"{inventory.fingerprint}.json").exists()
     assert not inventory.has_successful_output(track)
 
+    # A same-stem sidecar is not a verified video output.
+    (completed / "Movie.srt").write_bytes(b"subtitle sidecar")
+    sidecar_only = DiscRipInventory(str(log_dir), str(completed), "DISC", "Movie", "bluray", [track])
+    assert not sidecar_only.has_successful_output(track)
+
     (completed / "Movie.mkv").write_bytes(b"verified output")
     refreshed = DiscRipInventory(str(log_dir), str(completed), "DISC", "Movie", "bluray", [track])
     assert refreshed.has_successful_output(track)

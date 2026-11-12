@@ -189,7 +189,6 @@ class DiscRipInventory:
         )
         self.data = {"version": 1, "disc_fingerprint": self.fingerprint, "tracks": {}}
         self._existing_names = set()
-        self._existing_stems = set()
         self._load()
         self._index_completed_files()
 
@@ -226,7 +225,6 @@ class DiscRipInventory:
                     continue
                 folded = filename.casefold()
                 self._existing_names.add(folded)
-                self._existing_stems.add(os.path.splitext(folded)[0])
 
     def has_successful_output(self, track):
         """Return true only when a prior success record and its output still exist."""
@@ -235,10 +233,7 @@ class DiscRipInventory:
             return False
         for alias in record.get("aliases", []):
             basename = os.path.basename(str(alias)).casefold()
-            if basename and (
-                basename in self._existing_names
-                or os.path.splitext(basename)[0] in self._existing_stems
-            ):
+            if basename and basename in self._existing_names:
                 return True
         return False
 
