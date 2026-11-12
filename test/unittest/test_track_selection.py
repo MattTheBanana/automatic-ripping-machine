@@ -83,7 +83,7 @@ def test_none_subtitles_are_not_selected_in_makemkv_or_handbrake():
     assert build_makemkv_selection_rule("all", "none") == (
         "-sel:all,+sel:audio,=100:all,-10:favlang"
     )
-    args = shlex.split(build_handbrake_track_selection_args("all", "none"))
+    args = build_handbrake_track_selection_args("all", "none")
     assert "--all-audio" in args
     assert "--all-subtitles" not in args
     assert "--subtitle-lang-list" not in args
@@ -93,6 +93,6 @@ def test_selected_subtitle_languages_keep_every_matching_track():
     assert build_makemkv_selection_rule("all", "eng,fra") == (
         "-sel:all,+sel:audio,+sel:subtitle&(eng|fra),=100:all,-10:favlang"
     )
-    args = shlex.split(build_handbrake_track_selection_args("all", "eng,fra"))
+    args = build_handbrake_track_selection_args("all", "eng,fra")
     assert args[args.index("--subtitle-lang-list") + 1] == "eng,fra"
     assert "--all-subtitles" in args
