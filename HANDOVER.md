@@ -202,3 +202,12 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 - The same language preferences replace HandBrake's language/track-selection flags in `arm/ripper/handbrake.py:correct_hb_settings`, preventing the default subtitle scan/forced-only options from silently dropping ordinary subtitle tracks from transcoded output. Other HandBrake options remain in place. Audio and subtitle selection flags in `HB_ARGS_DVD`/`HB_ARGS_BD` are deliberately superseded by these explicit language settings.
 - With both settings set to `all`, MakeMKV uses `+sel:all`; HandBrake uses `--all-audio --all-subtitles`. A custom list limits each stream type separately. Invalid values log a warning and fall back to all languages rather than silently dropping tracks.
 - Regression coverage is in `test/unittest/test_track_selection.py` and is included in the focused Python 3.10 CI test command. End-to-end DVD/Blu-ray testing and confirmation of the final transcoded audio/subtitle inventory still require a real disc and running ARM container.
+
+
+## Subtitle selection menu and no-subtitle mode (2026-11-12)
+
+- The Ripper Settings page renders `RIP_SUBTITLE_LANGUAGES` as a menu: keep all subtitle tracks, keep selected languages, or do not include subtitles. The multi-select list includes common languages and preserves configured language codes not in its built-in list.
+- The visible controls serialize to the existing `RIP_SUBTITLE_LANGUAGES` arm.yaml key (`all`, `none`, or comma-separated ISO 639-2 codes), so no database migration is required.
+- `none` omits subtitle selection from MakeMKV's default selection rule and HandBrake's command line. `all` selects every language; selected languages retain every matching track rather than only the first match. The old HandBrake scan/forced-only/burned-only arguments are superseded by this setting so ordinary subtitle tracks are not silently filtered.
+- Selection is by language, not individual stream index. Bitmap subtitle formats such as Blu-ray PGS are best retained in MKV; MP4/container and preset compatibility may prevent some formats from being copied through. Verify the final file's subtitle stream inventory after transcoding.
+- Regression tests cover all, selected-language, and no-subtitle MakeMKV/HandBrake arguments. End-to-end DVD and Blu-ray testing remains necessary.

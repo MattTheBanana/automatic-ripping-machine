@@ -114,7 +114,7 @@ _SETTING_LABELS = {
     "RIPMETHOD_BR": "Blu-ray Rip Method",
     "MKV_ARGS": "MakeMKV Arguments",
     "RIP_AUDIO_LANGUAGES": "Audio / Dub Languages to Keep",
-    "RIP_SUBTITLE_LANGUAGES": "Subtitle Languages to Keep",
+    "RIP_SUBTITLE_LANGUAGES": "Subtitle Track Selection",
     "DELRAWFILES": "Delete Raw Rip Files",
     "HB_PRESET_DVD": "DVD HandBrake Preset",
     "HB_PRESET_BD": "Blu-ray HandBrake Preset",

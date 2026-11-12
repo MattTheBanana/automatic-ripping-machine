@@ -41,6 +41,8 @@ def normalize_track_languages(value, setting_name):
     raw_value = str(value if value is not None else "all").strip().lower()
     if raw_value in ("", "all", "any"):
         return None
+    if raw_value in ("none", "off", "disabled"):
+        return []
 
     languages = [token.strip() for token in raw_value.split(",")]
     if not languages or any(
@@ -74,8 +76,9 @@ def build_makemkv_selection_rule(audio_languages="all", subtitle_languages="all"
 
     if subtitles is None:
         rule_parts.append("+sel:subtitle")
-    else:
+    elif subtitles:
         rule_parts.append("+sel:subtitle&(" + "|".join(subtitles) + ")")
+    # An empty list intentionally leaves subtitle tracks unselected.
 
     # Retain MakeMKV's normal title-priority behavior after selecting stream types.
     rule_parts.extend(["=100:all", "-10:favlang"])
@@ -183,9 +186,12 @@ def build_handbrake_track_selection_args(audio_languages="all", subtitle_languag
         args.extend(["--audio-lang-list", ",".join(audio)])
     args.append("--all-audio")
 
-    if subtitles is not None:
+    if subtitles is None:
+        args.append("--all-subtitles")
+    elif subtitles:
         args.extend(["--subtitle-lang-list", ",".join(subtitles)])
-    args.append("--all-subtitles")
+        args.append("--all-subtitles")
+    # An empty list intentionally adds no subtitle-selection option.
     return args
 
 
