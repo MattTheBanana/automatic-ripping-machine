@@ -4,6 +4,7 @@ import shlex
 from arm.ripper.track_selection import (
     apply_handbrake_track_selection_args,
     build_makemkv_selection_rule,
+    build_handbrake_track_selection_args,
     write_makemkv_selection_rule,
 )
 
@@ -76,7 +77,6 @@ def test_handbrake_defaults_include_every_language():
     assert "--all-subtitles" in args
     assert "--subtitle-lang-list" not in args
     assert "--subtitle" not in args
-
 
 
 def test_none_subtitles_are_not_selected_in_makemkv_or_handbrake():

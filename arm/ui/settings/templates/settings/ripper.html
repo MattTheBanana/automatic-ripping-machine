@@ -66,14 +66,14 @@
                                     {% if ripper_read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
                                 {% set subtitle_options = [
                                     ('eng', 'English'), ('spa', 'Spanish'), ('fra', 'French'),
-                                    ('deu', 'German'), ('ita', 'Italian'), ('por', 'Portuguese'),
-                                    ('jpn', 'Japanese'), ('kor', 'Korean'), ('zho', 'Chinese'),
+                                    ('deu', 'German'), ('ger', 'German (legacy code)'), ('ita', 'Italian'), ('por', 'Portuguese'),
+                                    ('jpn', 'Japanese'), ('kor', 'Korean'), ('zho', 'Chinese'), ('chi', 'Chinese (legacy code)'),
                                     ('nld', 'Dutch'), ('rus', 'Russian'), ('ara', 'Arabic'),
                                     ('pol', 'Polish'), ('swe', 'Swedish'), ('nor', 'Norwegian'),
                                     ('dan', 'Danish'), ('fin', 'Finnish'), ('ces', 'Czech'),
-                                    ('ell', 'Greek'), ('heb', 'Hebrew'), ('hin', 'Hindi'),
+                                    ('ell', 'Greek'), ('gre', 'Greek (legacy code)'), ('heb', 'Hebrew'), ('hin', 'Hindi'),
                                     ('tha', 'Thai'), ('tur', 'Turkish'), ('hun', 'Hungarian'),
-                                    ('ron', 'Romanian'), ('ukr', 'Ukrainian'), ('cat', 'Catalan'),
+                                    ('ron', 'Romanian'), ('rum', 'Romanian (legacy code)'), ('ukr', 'Ukrainian'), ('cat', 'Catalan'),
                                     ('ind', 'Indonesian'), ('msa', 'Malay'), ('vie', 'Vietnamese')
                                 ] %}
                                 {% for code, language in subtitle_options %}
