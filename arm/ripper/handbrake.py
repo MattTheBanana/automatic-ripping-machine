@@ -7,6 +7,7 @@ import subprocess
 import re
 import shlex
 import arm.config.config as cfg
+from arm.ripper.track_selection import apply_handbrake_track_selection_args
 
 from arm.ripper import utils
 from arm.ui import app, db  # noqa E402
@@ -215,6 +216,11 @@ def correct_hb_settings(job):
     elif job.disctype == "bluray":
         hb_args = job.config.HB_ARGS_BD
         hb_preset = job.config.HB_PRESET_BD
+    hb_args = apply_handbrake_track_selection_args(
+        hb_args,
+        cfg.arm_config.get("RIP_AUDIO_LANGUAGES", "all"),
+        cfg.arm_config.get("RIP_SUBTITLE_LANGUAGES", "all"),
+    )
     return hb_args, hb_preset
 
 

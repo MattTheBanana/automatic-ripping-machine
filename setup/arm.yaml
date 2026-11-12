@@ -226,6 +226,14 @@ RIPMETHOD_BR: "PLACEHOLDER"
 # MKV_ARGS: "--debug=-stdout"  # this will enable more detailed logging
 MKV_ARGS: ""
 
+# Audio/dub languages retained by MakeMKV and HandBrake.
+# Use "all" to keep every language, or a comma-separated list of ISO 639-2 codes (e.g. "eng,spa").
+RIP_AUDIO_LANGUAGES: "all"
+
+# Subtitle languages retained by MakeMKV and HandBrake.
+# Use "all" to keep every language, or a comma-separated list of ISO 639-2 codes (e.g. "eng,spa").
+RIP_SUBTITLE_LANGUAGES: "all"
+
 # Remove any files created in the raw and transcode paths for the job after processing is complete
 DELRAWFILES: true
 

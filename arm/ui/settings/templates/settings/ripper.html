@@ -49,6 +49,46 @@
                                placeholder="{% if v %}Configured — leave blank to keep the saved value{% elif k == 'SMTP_PASSWORD' %}Enter SMTP password or app password{% elif k == 'FLASK_SECRET_KEY' %}Generated automatically if blank{% else %}Enter OAuth credential{% endif %}"
                                aria-describedby="armSettingHelp{{ k }}"
                                {% if ripper_read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
+                    {% elif k == 'RIP_SUBTITLE_LANGUAGES' %}
+                        {% set subtitle_value = v|string|lower|trim %}
+                        {% set subtitle_mode = 'all' if subtitle_value in ['', 'all', 'any'] else ('none' if subtitle_value == 'none' else 'selected') %}
+                        {% set subtitle_codes = [] if subtitle_mode != 'selected' else subtitle_value.split(',')|map('trim')|list %}
+                        <div class="arm-subtitle-selection">
+                            <select id="armSubtitleMode" class="form-control" aria-label="Subtitle selection mode"
+                                    {% if ripper_read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
+                                <option value="all" {% if subtitle_mode == 'all' %}selected{% endif %}>Keep all subtitle tracks</option>
+                                <option value="selected" {% if subtitle_mode == 'selected' %}selected{% endif %}>Keep selected languages</option>
+                                <option value="none" {% if subtitle_mode == 'none' %}selected{% endif %}>Do not include subtitles</option>
+                            </select>
+                            <label for="armSubtitleLanguages" class="arm-subtitle-language-label">Languages to keep</label>
+                            <select id="armSubtitleLanguages" class="form-control" multiple size="7"
+                                    aria-label="Subtitle languages to keep"
+                                    {% if ripper_read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
+                                {% set subtitle_options = [
+                                    ('eng', 'English'), ('spa', 'Spanish'), ('fra', 'French'),
+                                    ('deu', 'German'), ('ger', 'German (legacy code)'), ('ita', 'Italian'), ('por', 'Portuguese'),
+                                    ('jpn', 'Japanese'), ('kor', 'Korean'), ('zho', 'Chinese'), ('chi', 'Chinese (legacy code)'),
+                                    ('nld', 'Dutch'), ('rus', 'Russian'), ('ara', 'Arabic'),
+                                    ('pol', 'Polish'), ('swe', 'Swedish'), ('nor', 'Norwegian'),
+                                    ('dan', 'Danish'), ('fin', 'Finnish'), ('ces', 'Czech'),
+                                    ('ell', 'Greek'), ('gre', 'Greek (legacy code)'), ('heb', 'Hebrew'), ('hin', 'Hindi'),
+                                    ('tha', 'Thai'), ('tur', 'Turkish'), ('hun', 'Hungarian'),
+                                    ('ron', 'Romanian'), ('rum', 'Romanian (legacy code)'), ('ukr', 'Ukrainian'), ('cat', 'Catalan'),
+                                    ('ind', 'Indonesian'), ('msa', 'Malay'), ('vie', 'Vietnamese')
+                                ] %}
+                                {% for code, language in subtitle_options %}
+                                    <option value="{{ code }}" {% if code in subtitle_codes %}selected{% endif %}>{{ language }} ({{ code }})</option>
+                                {% endfor %}
+                                {% for code in subtitle_codes %}
+                                    {% if code not in subtitle_options|map(attribute=0)|list %}
+                                        <option value="{{ code }}" selected>Other / configured ({{ code }})</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                            <input id="armSettingRIP_SUBTITLE_LANGUAGES" type="hidden"
+                                   name="RIP_SUBTITLE_LANGUAGES" value="{{ v }}">
+                            <small class="form-text text-muted">Select one or more languages (use Ctrl/Cmd to choose multiple). Every matching subtitle track in those languages is retained.</small>
+                        </div>
                     {% else %}
                         <input id="armSetting{{ k }}" type="text" class="form-control" aria-label="{{ k }}" name="{{ k }}"
                                placeholder="{{ v }}" value="{{ v }}" aria-describedby="armSettingHelp{{ k }}"
@@ -69,6 +109,27 @@
             const root = document.getElementById("armSettingsGrid");
             const search = document.getElementById("armSettingsSearch");
             if (!root || !search) return;
+
+            // Keep the visible menu compatible with the existing single YAML setting.
+            const subtitleMode = document.getElementById("armSubtitleMode");
+            const subtitleLanguages = document.getElementById("armSubtitleLanguages");
+            const subtitleValue = document.getElementById("armSettingRIP_SUBTITLE_LANGUAGES");
+            function syncSubtitleSelection() {
+                if (!subtitleMode || !subtitleLanguages || !subtitleValue) return;
+                const selected = Array.from(subtitleLanguages.selectedOptions).map(option => option.value);
+                subtitleLanguages.disabled = subtitleMode.value !== "selected" || {{ 'true' if ripper_read_only else 'false' }};
+                subtitleLanguages.required = subtitleMode.value === "selected";
+                subtitleValue.value = subtitleMode.value === "all" ? "all" :
+                    (subtitleMode.value === "none" ? "none" : selected.join(","));
+            }
+            if (subtitleMode && subtitleLanguages && subtitleValue) {
+                subtitleMode.addEventListener("change", syncSubtitleSelection);
+                subtitleLanguages.addEventListener("change", syncSubtitleSelection);
+                const ripperForm = document.getElementById("ripperSettings");
+                if (ripperForm) ripperForm.addEventListener("submit", syncSubtitleSelection);
+                syncSubtitleSelection();
+            }
+
             const rows = Array.from(root.querySelectorAll(".arm-setting-row"));
             const sections = new Map();
 
