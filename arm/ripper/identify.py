@@ -22,7 +22,7 @@ from arm.models.ui_settings import UISettings
 from arm.ripper import utils
 from arm.ripper.ProcessHandler import arm_subprocess
 from arm.ui import db
-from arm.media_metadata import parse_media_label, select_best_media_result
+from arm.media_metadata import parse_media_label, select_best_media_result, is_generic_disc_title
 
 # flake8: noqa: W605
 from arm.ui import utils as ui_utils
@@ -85,6 +85,9 @@ def identify(job):
                 res = identify_dvd(job)
             if job.disctype == "bluray":
                 res = identify_bluray(job)
+                # Prefer MakeMKV's title when XML/label identification is missing or
+                # merely repeats a generic volume label; preserve a better identified title.
+                res = _apply_makemkv_disc_title(job) or res
             if res:
                 get_video_details(job)
             else:
@@ -95,6 +98,9 @@ def identify(job):
                          f"year:{job.year} video_type:{job.video_type} "
                          f"disctype: {job.disctype}")
             logging.debug(f"identify.job.end ---- \n\r{job.pretty_table()}")
+        elif job.disctype == "bluray":
+            # MakeMKV's detected title is also useful when online metadata lookup is disabled.
+            _apply_makemkv_disc_title(job)
     # No need to warn if we cant unmount
     arm_subprocess(["umount", job.devpath])
 
@@ -114,6 +120,38 @@ def _apply_disc_label_metadata(job):
     if parsed.get("year") and not getattr(job, "year", None):
         job.year = job.year_auto = parsed["year"]
     return parsed
+
+
+def _apply_makemkv_disc_title(job):
+    """Persist MakeMKV's disc title and use it when ARM's current title is only a label."""
+    try:
+        from arm.ripper.makemkv import get_disc_title
+        makemkv_title = get_disc_title(job)
+    except Exception as error:
+        logging.warning("Could not read MakeMKV disc title for metadata identification: %s", error)
+        return False
+
+    makemkv_title = str(makemkv_title or "").strip()
+    if not makemkv_title:
+        return False
+
+    current_title = str(getattr(job, "title", "") or "").strip()
+    disc_label = str(getattr(job, "label", "") or "").strip()
+    should_use = (
+        not current_title
+        or current_title.casefold() == "none"
+        or is_generic_disc_title(current_title)
+        or (disc_label and current_title.casefold() == disc_label.casefold())
+    )
+    if should_use:
+        job.title = job.title_auto = makemkv_title
+        job._arm_makemkv_title_used = True
+        db.session.commit()
+        logging.info("Using MakeMKV's detected disc title as ARM's title query/fallback.")
+        return True
+
+    logging.debug("Keeping the better existing disc title; MakeMKV's title was recorded as an alternate.")
+    return False
 
 
 def identify_bluray(job):
@@ -329,7 +367,10 @@ def update_job(job, search_results):
         return None
 
     parsed_label = parse_media_label(getattr(job, "label", None))
-    preferred_title = parsed_label.get("title") or job.title
+    makemkv_title_used = bool(getattr(job, "_arm_makemkv_title_used", False))
+    preferred_title = (
+        getattr(job, "makemkv_disc_title", None) if makemkv_title_used else None
+    ) or parsed_label.get("title") or job.title
     preferred_year = parsed_label.get("year") or job.year
     prefer_series = bool(getattr(job, "season_number", None) or getattr(job, "episode_start", None))
     selected = None

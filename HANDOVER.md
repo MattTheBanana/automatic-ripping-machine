@@ -196,7 +196,7 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 
 ## Configurable audio/dub and subtitle language preservation (2026-10-29)
 
-- Implementation PR: https://github.com/MattTheBanana/automatic-ripping-machine/pull/22. The changes are on an open feature branch; do not describe them as merged or deployed until the PR is merged and the custom image is rebuilt/pulled.
+- Implementation PR: https://github.com/MattTheBanana/automatic-ripping-machine/pull/22. Merged to `main` on 2026-11-12 (merge commit `9e85b1bd1b7a2637d2107700a7983f215a58ef5c`). A running TrueNAS deployment still needs the rebuilt image pulled/recreated.
 - New settings `RIP_AUDIO_LANGUAGES` and `RIP_SUBTITLE_LANGUAGES` default to `all`. In Ripper Settings, each accepts `all` or a comma-separated list of ISO 639-2 three-letter language codes (for example `eng,spa,fra`). They apply independently to audio/dubs and subtitles.
 - `arm/ripper/track_selection.py` builds MakeMKV's `app_DefaultSelectionString` and safely updates `/home/arm/.MakeMKV/settings.conf` while preserving the registration key and unrelated preferences. `makemkv()` applies this after `prep_mkv()` ensures the MakeMKV settings file/key exists.
 - The same language preferences replace HandBrake's language/track-selection flags in `arm/ripper/handbrake.py:correct_hb_settings`, preventing the default subtitle scan/forced-only options from silently dropping ordinary subtitle tracks from transcoded output. Other HandBrake options remain in place. Audio and subtitle selection flags in `HB_ARGS_DVD`/`HB_ARGS_BD` are deliberately superseded by these explicit language settings.
@@ -211,3 +211,15 @@ After a code change is merged to `main`, the `Build and publish custom ARM` work
 - `none` omits subtitle selection from MakeMKV's default selection rule and HandBrake's command line. `all` selects every language; selected languages retain every matching track rather than only the first match. The old HandBrake scan/forced-only/burned-only arguments are superseded by this setting so ordinary subtitle tracks are not silently filtered.
 - Selection is by language, not individual stream index. Bitmap subtitle formats such as Blu-ray PGS are best retained in MKV; MP4/container and preset compatibility may prevent some formats from being copied through. Verify the final file's subtitle stream inventory after transcoding.
 - Regression tests cover all, selected-language, and no-subtitle MakeMKV/HandBrake arguments. End-to-end DVD and Blu-ray testing remains necessary.
+
+
+## Current development notes (2026-11-12)
+
+### PR #23 — smart Blu-ray playlist analysis and incremental title ripping
+
+- Active PR: https://github.com/MattTheBanana/automatic-ripping-machine/pull/23. Stores MakeMKV playlist IDs and ordered segment maps, logs advisory comparisons without excluding candidates, and adds a local opt-in per-title rip inventory.
+- Synced with the `main` commit merging PR #22; preserves MakeMKV audio/subtitle selection, the settings UI, and its tests. CI now includes both track-selection and disc-analysis suites.
+- `SMART_DISC_ANALYSIS` is Blu-ray-only. `INCREMENTAL_RIPPING` defaults off and applies to per-title MakeMKV ripping; `backup` / `backup_dvd` remain full-disc backups. Inventory is local under `LOGPATH/disc-inventory/`; no remote catalogue or upload is implemented.
+- Inventory requires an exact expected output filename; a same-stem sidecar such as `.srt` is not sufficient.
+- Migration `b7e3f1a9c2d4` needs upgrade/downgrade testing against a database copy. Physical optical-drive and output-stream testing remain outstanding.
+- Pre-sync PR #23 head `06f67d89d66f222f506f20aeca95d027cbb3e9cf` passed Quality Checks, Docker PR build and ShellCheck. The sync changes require fresh CI.

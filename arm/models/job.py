@@ -125,6 +125,7 @@ class Job(db.Model):
     title = db.Column(db.String(256))
     title_auto = db.Column(db.String(256))
     title_manual = db.Column(db.String(256))
+    makemkv_disc_title = db.Column(db.String(256))
     year = db.Column(db.String(4))
     year_auto = db.Column(db.String(4))
     year_manual = db.Column(db.String(4))

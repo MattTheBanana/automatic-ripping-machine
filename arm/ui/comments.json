@@ -118,5 +118,7 @@
   "bootstrap_skin": "Bootstrap remote skin \n# You can find all versions available from \n#https://www.bootstrapcdn.com/bootswatch/\n# You will need to refresh the page to see the updated bootstrap skin",
   "language": "What language do you want A.R.M to use ?",
   "database_limit": "limit the number of jobs to show on each page, over 175 will make things go funky!",
-  "notify_refresh": "Set the Notification timeout value in milliseconds, values less than 1 second should be avoided."
+  "notify_refresh": "Set the Notification timeout value in milliseconds, values less than 1 second should be avoided.",
+  "SMART_DISC_ANALYSIS": "Warn about close-duration/size Blu-ray titles and compare ordered MakeMKV segment maps. This is heuristic only; ARM never discards candidates automatically.",
+  "INCREMENTAL_RIPPING": "# Skip previously successful title rips only when a recorded output file still exists and is non-empty.\n# Applies to MakeMKV per-title ripping; Blu-ray backup/backup_dvd modes continue to back up the full disc."
 }
